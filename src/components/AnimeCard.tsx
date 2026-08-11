@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Play, Star, Info, Bookmark, BookmarkCheck } from 'lucide-react';
 import { Anime } from '../types/anime';
 import { useWatchlist } from '../context/WatchlistContext';
+import { AnimeImage } from './AnimeImage';
 
 interface AnimeCardProps {
   anime: Anime;
@@ -63,10 +64,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, rank }) => {
         </div>
 
         {/* Poster Image */}
-        <img
+        <AnimeImage
           src={anime.poster}
           alt={anime.title}
-          loading="lazy"
+          type="poster"
+          animeTitle={anime.title}
           className="w-full h-full object-cover"
         />
 

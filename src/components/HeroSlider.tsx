@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Play, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, Star, Tv, Calendar } from 'lucide-react';
 import { Anime } from '../types/anime';
 import { useWatchlist } from '../context/WatchlistContext';
+import { AnimeImage } from './AnimeImage';
 
 interface HeroSliderProps {
   animeList: Anime[];
@@ -53,10 +54,13 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({ animeList }) => {
               index === currentIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
             }`}
           >
-            <img
+            <AnimeImage
               src={anime.banner || anime.poster}
               alt={anime.title}
-              className="w-full h-full object-cover object-center scale-105 transform animate-pulse-slow"
+              type="banner"
+              animeTitle={anime.title}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              className="w-full h-full object-cover object-center scale-105 transform"
             />
             {/* Dark Cinematic Gradients */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#080808] via-[#080808]/70 to-transparent" />

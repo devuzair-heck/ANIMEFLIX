@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { WatchlistProvider } from './context/WatchlistContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Toast } from './components/Toast';
 import { AppRoutes } from './routes/AppRoutes';
+import { validateAnimeImages } from './utils/validateAnimeImages';
 
 export default function App() {
+  useEffect(() => {
+    validateAnimeImages();
+  }, []);
   return (
     <BrowserRouter>
       <WatchlistProvider>

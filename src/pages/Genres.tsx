@@ -1,100 +1,114 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Grid, Sparkles } from 'lucide-react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Layers, ArrowRight, Sparkles } from 'lucide-react';
 import { DEMO_ANIME, GENRES_LIST } from '../utils/animeData';
-import { AnimeCard } from '../components/AnimeCard';
+
+// Background images for genre cards
+const GENRE_IMAGES: Record<string, string> = {
+  Action: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=800&auto=format&fit=crop',
+  Adventure: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop',
+  Comedy: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop',
+  Drama: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=800&auto=format&fit=crop',
+  Fantasy: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop',
+  Romance: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop',
+  Horror: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=800&auto=format&fit=crop',
+  Mystery: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop',
+  'Sci-Fi': 'https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=800&auto=format&fit=crop',
+  Sports: 'https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=800&auto=format&fit=crop',
+  Supernatural: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop',
+  Thriller: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?q=80&w=800&auto=format&fit=crop',
+  Historical: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=800&auto=format&fit=crop',
+  Music: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop',
+  School: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop',
+  'Martial Arts': 'https://images.unsplash.com/photo-1563089145-599997674d42?q=80&w=800&auto=format&fit=crop',
+};
 
 export const Genres: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const genreFromUrl = searchParams.get('genre') || 'Action';
+  const navigate = useNavigate();
 
-  const [activeGenre, setActiveGenre] = useState(genreFromUrl);
-
-  useEffect(() => {
-    setActiveGenre(searchParams.get('genre') || 'Action');
-  }, [searchParams]);
-
-  const handleSelectGenre = (genre: string) => {
-    setActiveGenre(genre);
-    setSearchParams({ genre });
+  const handleGenreClick = (genre: string) => {
+    navigate(`/browse?genre=${encodeURIComponent(genre)}`);
   };
 
-  const animeInGenre = DEMO_ANIME.filter((a) =>
-    a.genres.includes(activeGenre)
-  );
-
   return (
-    <div className="min-h-screen bg-[#080808] pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-      
-      {/* Header */}
-      <div className="mb-8 text-center sm:text-left">
-        <div className="flex items-center justify-center sm:justify-start gap-2 text-red-500 font-bold text-xs uppercase tracking-widest mb-2">
-          <Grid className="w-4 h-4" />
-          <span>Category Explorer</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-          Anime <span className="text-red-600">Genres</span>
-        </h1>
-        <p className="text-neutral-400 text-sm mt-2 max-w-2xl">
-          Filter anime series by their thematic genres. Select any category below to view top-rated titles.
-        </p>
-      </div>
-
-      {/* Genre Pills Slider / Grid */}
-      <div className="flex flex-wrap gap-2 sm:gap-3 mb-10 pb-4 border-b border-white/10">
-        {GENRES_LIST.map((genre) => {
-          const count = DEMO_ANIME.filter((a) => a.genres.includes(genre)).length;
-          const isActive = genre === activeGenre;
-
-          return (
-            <button
-              key={genre}
-              onClick={() => handleSelectGenre(genre)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 ${
-                isActive
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-900/40 scale-105'
-                  : 'bg-[#171717] hover:bg-neutral-800 text-neutral-300 border border-white/5'
-              }`}
-            >
-              <span>{genre}</span>
-              <span
-                className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
-                  isActive ? 'bg-black/30 text-white' : 'bg-neutral-800 text-neutral-400'
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Active Genre Title */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-black text-white flex items-center gap-2">
-          <span>{activeGenre} Anime</span>
-          <Sparkles className="w-5 h-5 text-amber-400" />
-        </h2>
-        <span className="text-sm font-semibold text-neutral-400">
-          {animeInGenre.length} Titles
-        </span>
-      </div>
-
-      {/* Anime Grid */}
-      {animeInGenre.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-          {animeInGenre.map((anime) => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </div>
-      ) : (
-        <div className="bg-[#171717] border border-white/10 rounded-2xl p-12 text-center max-w-md mx-auto my-8">
-          <p className="text-neutral-400 text-sm">
-            No titles available under {activeGenre} yet. Select another genre above!
+    <div className="min-h-screen bg-[#080808] text-white pt-24 pb-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Header */}
+        <div className="mb-10">
+          <div className="flex items-center gap-2 text-[#DC143C] font-bold text-xs uppercase tracking-widest mb-2">
+            <Layers className="w-4 h-4" />
+            <span>Categories</span>
+          </div>
+          <h1 className="text-3xl sm:text-5xl font-black text-white uppercase italic tracking-tight flex items-center gap-3">
+            <span className="w-1.5 h-10 bg-[#DC143C] hidden sm:block" />
+            <span>Explore <span className="text-[#DC143C]">Anime Genres</span></span>
+          </h1>
+          <p className="text-gray-400 text-xs sm:text-sm mt-2 max-w-xl">
+            Choose a genre to instantly view all matching anime titles in our catalog.
           </p>
         </div>
-      )}
 
+        {/* Genre Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          {GENRES_LIST.map((genre) => {
+            const count = DEMO_ANIME.filter((a) =>
+              a.genres.some((g) => g.toLowerCase() === genre.toLowerCase())
+            ).length;
+
+            const bgImage = GENRE_IMAGES[genre] || GENRE_IMAGES.Action;
+
+            return (
+              <div
+                key={genre}
+                onClick={() => handleGenreClick(genre)}
+                tabIndex={0}
+                role="button"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleGenreClick(genre);
+                  }
+                }}
+                className="group relative h-40 sm:h-48 rounded-2xl overflow-hidden border border-white/10 hover:border-[#DC143C] transition-all duration-300 cursor-pointer shadow-xl hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-[#DC143C]"
+              >
+                {/* Background Image */}
+                <img
+                  src={bgImage}
+                  alt={genre}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 filter brightness-75"
+                />
+
+                {/* Dark Vignette Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/20 group-hover:via-black/40 transition-colors" />
+
+                {/* Content */}
+                <div className="absolute inset-0 p-5 flex flex-col justify-between z-10">
+                  <div className="flex justify-between items-start">
+                    <span className="bg-[#DC143C]/20 border border-[#DC143C]/40 text-[#DC143C] text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      {count} {count === 1 ? 'Title' : 'Titles'}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-white/10 backdrop-blur border border-white/10 flex items-center justify-center text-white group-hover:bg-[#DC143C] transition-colors">
+                      <ArrowRight className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tight group-hover:text-[#DC143C] transition-colors flex items-center gap-2">
+                      <span>{genre}</span>
+                      <Sparkles className="w-4 h-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </h2>
+                    <p className="text-[11px] text-gray-400 font-medium">
+                      Discover top rated {genre.toLowerCase()} anime
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </div>
     </div>
   );
 };
