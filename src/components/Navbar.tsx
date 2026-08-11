@@ -31,6 +31,28 @@ export const Navbar: React.FC = () => {
     setIsSearchOpen(false);
   }, [location]);
 
+  // Lock body scroll and listen for Escape key when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+        setIsSearchOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMobileMenuOpen]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -178,8 +200,9 @@ export const Navbar: React.FC = () => {
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 text-neutral-300 hover:text-white rounded-xl bg-[#171717] border border-white/10 ml-1"
+              className="p-2 text-neutral-300 hover:text-white rounded-xl bg-[#171717] border border-white/10 ml-1 transition-colors"
               aria-label="Toggle navigation menu"
+              aria-expanded={isMobileMenuOpen}
             >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -188,49 +211,74 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Slide-down Menu */}
+      {/* Mobile Menu Drawer & Overlay */}
       {isMobileMenuOpen && (
-        <div className="md:hidden glass-panel border-b border-white/10 px-4 pt-4 pb-6 mt-3 animate-in slide-in-from-top-2 duration-300">
-          <form onSubmit={handleSearchSubmit} className="mb-4 relative">
-            <input
-              type="text"
-              placeholder="Search anime..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#111111] border border-white/10 text-white text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-red-600"
-            />
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          </form>
+        <>
+          {/* Semi-transparent backdrop */}
+          <div
+            className="fixed inset-0 top-[60px] bg-black/70 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-200"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
 
-          <nav className="flex flex-col gap-1.5">
-            {navLinks.map((link) => {
-              const active = isActive(link.path);
-              return (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  className={`px-4 py-2.5 rounded-xl text-base font-semibold transition-all ${
-                    active
-                      ? 'bg-red-600 text-white'
-                      : 'text-neutral-300 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="relative z-50 md:hidden bg-[#0d0d0d] border-b border-white/10 px-4 pt-4 pb-6 shadow-2xl animate-in slide-in-from-top duration-300 max-h-[calc(100vh-70px)] overflow-y-auto">
+            <form onSubmit={handleSearchSubmit} className="mb-4 relative">
+              <input
+                type="text"
+                placeholder="Search anime title, genre..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[#171717] border border-white/10 text-white text-sm rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-[#DC143C]"
+              />
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            </form>
 
-          <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-            <Link
-              to="/profile"
-              className="flex items-center gap-2 text-sm font-semibold text-white bg-red-600 px-4 py-2 rounded-xl w-full justify-center shadow-lg shadow-red-900/30"
-            >
-              <User className="w-4 h-4" />
-              <span>Account & Profile</span>
-            </Link>
+            <nav className="flex flex-col gap-1">
+              {navLinks.map((link) => {
+                const active = isActive(link.path);
+                return (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={`px-4 py-3 rounded-xl text-base font-bold flex items-center justify-between transition-all ${
+                      active
+                        ? 'bg-[#DC143C] text-white shadow-lg'
+                        : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>{link.name}</span>
+                    <span className="text-xs opacity-60">→</span>
+                  </Link>
+                );
+              })}
+              <Link
+                to="/watchlist"
+                className={`px-4 py-3 rounded-xl text-base font-bold flex items-center justify-between transition-all ${
+                  isActive('/watchlist')
+                    ? 'bg-[#DC143C] text-white shadow-lg'
+                    : 'text-neutral-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <span>My Watchlist</span>
+                {watchlist.length > 0 && (
+                  <span className="bg-red-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                    {watchlist.length}
+                  </span>
+                )}
+              </Link>
+            </nav>
+
+            <div className="mt-5 pt-4 border-t border-white/10 flex items-center justify-between">
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 text-sm font-bold text-white bg-[#DC143C] hover:bg-[#b01030] px-4 py-3 rounded-xl w-full justify-center shadow-lg transition-colors uppercase tracking-wider"
+              >
+                <User className="w-4 h-4" />
+                <span>Account & Profile</span>
+              </Link>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </header>
   );

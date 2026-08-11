@@ -6,6 +6,7 @@ import { AnimeCard } from '../components/AnimeCard';
 import { SearchBar } from '../components/SearchBar';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingGrid } from '../components/Loading';
+import { FilterDrawer } from '../components/FilterDrawer';
 
 const YEARS = ['All', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', 'Older'];
 const STATUS_OPTIONS = ['All', 'Ongoing', 'Completed'];
@@ -170,23 +171,44 @@ export const Browse: React.FC = () => {
         {/* Filters Section Wrapper */}
         <div className="bg-[#111111] border border-white/10 rounded-2xl p-4 sm:p-6 mb-8 shadow-xl">
           
-          {/* Mobile Filter Toggle Header */}
+          {/* Mobile Filter Toggle Button */}
           <div className="flex sm:hidden items-center justify-between pb-3 border-b border-white/10">
             <span className="font-bold text-xs uppercase tracking-wider text-white flex items-center gap-2">
               <SlidersHorizontal className="w-4 h-4 text-[#DC143C]" />
-              Filter Controls {isFiltered && '(Active)'}
+              Filter Catalog {isFiltered && <span className="text-[#DC143C]">(Active)</span>}
             </span>
             <button
-              onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
-              className="flex items-center gap-1 text-xs font-bold bg-[#DC143C] text-white px-3 py-1.5 rounded-sm uppercase"
+              onClick={() => setMobileFiltersOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-bold bg-[#DC143C] hover:bg-[#b01030] text-white px-3.5 py-2 rounded-xl uppercase tracking-wider transition-colors shadow-md"
             >
-              <span>{mobileFiltersOpen ? 'Hide Filters' : 'Show Filters'}</span>
-              {mobileFiltersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filters</span>
             </button>
           </div>
 
-          {/* Desktop + Collapsible Mobile Filters */}
-          <div className={`${mobileFiltersOpen ? 'block pt-4' : 'hidden sm:block'} space-y-5`}>
+          {/* Filter Drawer for Mobile */}
+          <FilterDrawer
+            isOpen={mobileFiltersOpen}
+            onClose={() => setMobileFiltersOpen(false)}
+            selectedGenre={selectedGenre}
+            setSelectedGenre={(g) => updateParam('genre', g)}
+            selectedStatus={selectedStatus}
+            setSelectedStatus={(s) => updateParam('status', s)}
+            selectedType={selectedType}
+            setSelectedType={(t) => updateParam('type', t)}
+            selectedYear={selectedYear}
+            setSelectedYear={(y) => updateParam('year', y)}
+            selectedRating={selectedRating}
+            setSelectedRating={(r) => updateParam('rating', r)}
+            selectedSort={selectedSort}
+            setSelectedSort={(s) => updateParam('sort', s)}
+            onApply={() => setMobileFiltersOpen(false)}
+            onReset={resetAllFilters}
+            isFiltered={isFiltered}
+          />
+
+          {/* Desktop Filters (Hidden on small mobile) */}
+          <div className="hidden sm:block space-y-5">
             
             {/* Genre Filter Chips */}
             <div>
