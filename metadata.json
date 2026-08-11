@@ -1,0 +1,6 @@
+{
+  "name": "AnimeFlix",
+  "description": "A modern, cinematic anime streaming web application featuring trending, popular, and recent anime, episode player, watchlist, and category browsing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
