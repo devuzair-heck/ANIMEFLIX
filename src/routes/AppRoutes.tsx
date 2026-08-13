@@ -13,6 +13,9 @@ import { ProfilePage } from '../pages/ProfilePage';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { AdminLoginPage } from '../pages/admin/AdminLoginPage';
+import { AdminVerifyPage } from '../pages/admin/AdminVerifyPage';
+import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 
 // Helper component to scroll window to top on route change
 const ScrollToTop = () => {
@@ -42,6 +45,9 @@ export const AppRoutes: React.FC = () => {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/admin/verify" element={<AdminVerifyPage />} />
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>

@@ -93,7 +93,7 @@ export const Footer: React.FC = () => {
             </ul>
           </div>
 
-          {/* User Account & Support */}
+          {/* User Account & Administration */}
           <div className="flex flex-col gap-3">
             <h3 className="text-white font-bold text-sm tracking-wider uppercase">Account</h3>
             <ul className="flex flex-col gap-2 text-sm">
@@ -108,6 +108,15 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <Link to="/register" className="hover:text-red-500 transition-colors">Create Account</Link>
+              </li>
+            </ul>
+
+            <h3 className="text-white font-bold text-sm tracking-wider uppercase mt-3">Administration</h3>
+            <ul className="flex flex-col gap-2 text-sm">
+              <li>
+                <Link to="/admin/login" className="hover:text-red-500 transition-colors text-neutral-400 hover:text-white flex items-center gap-1">
+                  <span>Admin Login</span>
+                </Link>
               </li>
             </ul>
           </div>
