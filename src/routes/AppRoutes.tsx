@@ -13,9 +13,15 @@ import { ProfilePage } from '../pages/ProfilePage';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+
+// Admin Pages
 import { AdminLoginPage } from '../pages/admin/AdminLoginPage';
-import { AdminVerifyPage } from '../pages/admin/AdminVerifyPage';
 import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
+import { AdminAnimeListPage } from '../pages/admin/AdminAnimeListPage';
+import { AdminAddAnimePage } from '../pages/admin/AdminAddAnimePage';
+import { AdminEditAnimePage } from '../pages/admin/AdminEditAnimePage';
+import { AdminEpisodesPage } from '../pages/admin/AdminEpisodesPage';
+import { ProtectedRoute } from '../components/admin/ProtectedRoute';
 
 // Helper component to scroll window to top on route change
 const ScrollToTop = () => {
@@ -33,6 +39,7 @@ export const AppRoutes: React.FC = () => {
     <>
       <ScrollToTop />
       <Routes>
+        {/* Public Browsing & Viewing Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/browse" element={<Browse />} />
         <Route path="/genres" element={<Genres />} />
@@ -45,9 +52,53 @@ export const AppRoutes: React.FC = () => {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+
+        {/* Admin Login Route */}
         <Route path="/admin/login" element={<AdminLoginPage />} />
-        <Route path="/admin/verify" element={<AdminVerifyPage />} />
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+
+        {/* Protected Admin Routes */}
+        <Route
+          path="/admin/dashboard"
+          element={
+            <ProtectedRoute>
+              <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/anime"
+          element={
+            <ProtectedRoute>
+              <AdminAnimeListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/anime/add"
+          element={
+            <ProtectedRoute>
+              <AdminAddAnimePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/anime/edit/:id"
+          element={
+            <ProtectedRoute>
+              <AdminEditAnimePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/episodes"
+          element={
+            <ProtectedRoute>
+              <AdminEpisodesPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* 404 Fallback */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>

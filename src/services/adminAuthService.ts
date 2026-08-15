@@ -1,27 +1,26 @@
 import axios from 'axios';
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+}
+
 export interface AdminLoginResponse {
   success: boolean;
   message?: string;
-  requireOtp?: boolean;
-  challengeId?: string;
   token?: string;
+  admin?: AdminUser;
   error?: string;
 }
 
-export interface VerifyOtpPayload {
-  challengeId?: string;
-  emailOtp: string;
-  smsOtp: string;
-}
-
-// Configure axios defaults for credentials/cookies
+// Enable sending cookies with cross-site requests if applicable
 axios.defaults.withCredentials = true;
 
 export const adminAuthService = {
   /**
-   * Sends admin login credentials to backend API
    * POST /api/admin/login
+   * Performs direct admin authentication with username & password
    */
   async login(username: string, password: string): Promise<AdminLoginResponse> {
     try {
@@ -31,71 +30,37 @@ export const adminAuthService = {
       });
       return response.data;
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data) {
+      if (axios.isAxiosError(err)) {
+        if (!err.response) {
+          return {
+            success: false,
+            error: 'Unable to connect to the server.',
+          };
+        }
+        if (err.response.status === 401) {
+          return {
+            success: false,
+            error: 'Invalid username or password.',
+          };
+        }
         const errorData = err.response.data as { error?: string; message?: string };
         return {
           success: false,
-          error: errorData.error || errorData.message || 'Invalid username or password.',
+          error: errorData.message || errorData.error || 'Unable to sign in. Please try again.',
         };
       }
       return {
         success: false,
-        error: 'Invalid username or password.',
+        error: 'Unable to sign in. Please try again.',
       };
     }
   },
 
   /**
-   * Verifies Admin Email and SMS OTPs
-   * POST /api/admin/verify-otp
-   */
-  async verifyOtp(payload: VerifyOtpPayload): Promise<{ success: boolean; token?: string; error?: string }> {
-    try {
-      const response = await axios.post('/api/admin/verify-otp', payload);
-      return response.data;
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data) {
-        const errorData = err.response.data as { error?: string; message?: string };
-        return {
-          success: false,
-          error: errorData.error || errorData.message || 'Invalid verification codes.',
-        };
-      }
-      return {
-        success: false,
-        error: 'Invalid verification codes. Please check both email and SMS codes.',
-      };
-    }
-  },
-
-  /**
-   * Triggers backend to resend OTP codes
-   * POST /api/admin/resend-otp
-   */
-  async resendOtp(challengeId?: string): Promise<{ success: boolean; message?: string; error?: string }> {
-    try {
-      const response = await axios.post('/api/admin/resend-otp', { challengeId });
-      return response.data;
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data) {
-        const errorData = err.response.data as { error?: string; message?: string };
-        return {
-          success: false,
-          error: errorData.error || errorData.message || 'Failed to resend verification codes.',
-        };
-      }
-      return {
-        success: false,
-        error: 'Unable to request new codes. Please try again.',
-      };
-    }
-  },
-
-  /**
-   * Verifies current admin session
    * GET /api/admin/me
+   * Validates active admin session
    */
-  async getMe(): Promise<{ success: boolean; admin?: { id: string; username: string; email: string }; error?: string }> {
+  async getMe(): Promise<{ success: boolean; admin?: AdminUser; error?: string }> {
     try {
       const response = await axios.get('/api/admin/me');
       return response.data;
@@ -105,8 +70,8 @@ export const adminAuthService = {
   },
 
   /**
-   * Logs out admin and clears session cookie
    * POST /api/admin/logout
+   * Destroys admin session cookie
    */
   async logout(): Promise<{ success: boolean }> {
     try {

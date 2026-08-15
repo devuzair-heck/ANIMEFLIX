@@ -1,5 +1,4 @@
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'animeflix_secure_jwt_secret_key_default_32_chars';
@@ -15,16 +14,6 @@ export async function compareValue(plainText: string, hashedText: string): Promi
   } catch {
     return false;
   }
-}
-
-export function generateOtpCode(): string {
-  // Generate 6-digit cryptographically secure number
-  const num = crypto.randomInt(100000, 1000000);
-  return num.toString();
-}
-
-export function generateChallengeId(): string {
-  return crypto.randomBytes(16).toString('hex');
 }
 
 export function signAdminToken(payload: { id: string; username: string; email: string }): string {
