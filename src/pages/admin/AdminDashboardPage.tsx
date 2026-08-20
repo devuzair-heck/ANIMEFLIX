@@ -30,6 +30,7 @@ export const AdminDashboardPage: React.FC = () => {
     publishedAnime: 0,
     draftAnime: 0,
   });
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshingStats, setIsRefreshingStats] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Anime | null>(null);
@@ -37,30 +38,39 @@ export const AdminDashboardPage: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
+    setStatsError(null);
     try {
       // Fetch both catalog and dynamic backend metrics
       const [animes, statsRes] = await Promise.all([
-        animeService.getAllAnime(),
-        adminAuthService.getDashboardStats(),
+        animeService.getAllAnime().catch(() => []),
+        adminAuthService.getDashboardStats().catch(() => ({
+          success: false,
+          data: { totalAnime: 0, totalEpisodes: 0, publishedAnime: 0, draftAnime: 0 },
+          error: 'Unable to load dashboard statistics.',
+        })),
       ]);
 
-      setAnimeList(animes);
+      setAnimeList(animes || []);
 
-      if (statsRes.success && statsRes.data) {
+      if (statsRes && statsRes.success && statsRes.data) {
         setStats(statsRes.data);
       } else {
+        if (statsRes && 'error' in statsRes && statsRes.error) {
+          setStatsError(statsRes.error);
+        }
         // Fallback calculation directly from fetched catalog
-        const totalEp = animes.reduce((acc, a) => acc + (a.episodes?.length || a.episodesCount || 0), 0);
-        const draftCount = animes.filter((a) => (a as any).status === 'Draft' || (a as any).isPublished === false).length;
+        const totalEp = (animes || []).reduce((acc, a) => acc + (a.episodes?.length || a.episodesCount || 0), 0);
+        const draftCount = (animes || []).filter((a) => (a as any).status === 'Draft' || (a as any).isPublished === false).length;
         setStats({
-          totalAnime: animes.length,
+          totalAnime: (animes || []).length,
           totalEpisodes: totalEp,
-          publishedAnime: animes.length - draftCount,
+          publishedAnime: (animes || []).length - draftCount,
           draftAnime: draftCount,
         });
       }
-    } catch {
-      // Handled
+    } catch (err) {
+      console.error('[Admin Dashboard] Load error:', err);
+      setStatsError('Unable to load dashboard statistics.');
     } finally {
       setIsLoading(false);
     }
@@ -72,13 +82,16 @@ export const AdminDashboardPage: React.FC = () => {
 
   const refreshStats = async () => {
     setIsRefreshingStats(true);
+    setStatsError(null);
     try {
       const statsRes = await adminAuthService.getDashboardStats();
       if (statsRes.success && statsRes.data) {
         setStats(statsRes.data);
+      } else if (statsRes.error) {
+        setStatsError(statsRes.error);
       }
     } catch {
-      // Handled
+      setStatsError('Unable to load dashboard statistics.');
     } finally {
       setIsRefreshingStats(false);
     }
@@ -166,6 +179,13 @@ export const AdminDashboardPage: React.FC = () => {
               <span>Refresh Metrics</span>
             </button>
           </div>
+
+          {statsError && (
+            <div className="bg-amber-950/40 border border-amber-500/30 text-amber-300 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Unable to load dashboard statistics. Displaying local catalog metrics.</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             

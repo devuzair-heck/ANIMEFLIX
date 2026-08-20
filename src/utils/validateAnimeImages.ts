@@ -58,7 +58,7 @@ export function validateAnimeImages(): ValidationReport {
   }
 
   // Console output log
-  if (process.env.NODE_ENV !== 'production') {
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
     console.group('🎨 [AnimeFlix Image Audit Report]');
     console.log(`Total Anime Scanned: ${report.totalAnime}`);
     console.log(`Missing Posters: ${report.missingPosters.length}`);

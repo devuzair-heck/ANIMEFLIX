@@ -21,10 +21,43 @@ export interface AdminLoginResponse {
   error?: string;
 }
 
-// Enable sending cookies with cross-site requests if applicable
+const TOKEN_KEY = 'animeflix_admin_token';
+const ADMIN_KEY = 'animeflix_admin_user';
+
+// Enable sending cookies with cross-site requests
 axios.defaults.withCredentials = true;
 
+// Initialize header with persisted token if available in browser
+if (typeof window !== 'undefined') {
+  const savedToken = localStorage.getItem(TOKEN_KEY);
+  if (savedToken) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+  }
+}
+
 export const adminAuthService = {
+  /**
+   * Returns current token from storage
+   */
+  getToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(TOKEN_KEY);
+  },
+
+  /**
+   * Returns cached admin info from storage
+   */
+  getCachedAdmin(): AdminUser | null {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(ADMIN_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * POST /api/admin/login
    * Performs direct admin authentication with username & password
@@ -32,16 +65,34 @@ export const adminAuthService = {
   async login(username: string, password: string): Promise<AdminLoginResponse> {
     try {
       const response = await axios.post<AdminLoginResponse>('/api/admin/login', {
-        username,
+        username: username.trim(),
         password,
       });
-      return response.data;
+
+      const data: AdminLoginResponse = response?.data || { success: false };
+
+      if (data.success && data.token) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(TOKEN_KEY, data.token);
+          if (data.admin) {
+            localStorage.setItem(ADMIN_KEY, JSON.stringify(data.admin));
+          }
+        }
+        axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+      }
+
+      return {
+        success: Boolean(data.success),
+        message: data.message || 'Login successful',
+        token: data.token,
+        admin: data.admin,
+      };
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (!err.response) {
           return {
             success: false,
-            error: 'Unable to connect to the server.',
+            error: 'Unable to connect to the server. Please try again.',
           };
         }
         if (err.response.status === 401) {
@@ -50,15 +101,15 @@ export const adminAuthService = {
             error: 'Invalid username or password.',
           };
         }
-        const errorData = err.response.data as { error?: string; message?: string };
+        const errorData = (err.response.data as { error?: string; message?: string }) || {};
         return {
           success: false,
-          error: errorData.message || errorData.error || 'Unable to sign in. Please try again.',
+          error: errorData.message || errorData.error || 'Something went wrong. Please try again.',
         };
       }
       return {
         success: false,
-        error: 'Unable to sign in. Please try again.',
+        error: 'Something went wrong. Please try again.',
       };
     }
   },
@@ -69,24 +120,50 @@ export const adminAuthService = {
    */
   async getMe(): Promise<{ success: boolean; admin?: AdminUser; error?: string }> {
     try {
+      const currentToken = this.getToken();
+      if (currentToken) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${currentToken}`;
+      }
+
       const response = await axios.get('/api/admin/me');
-      return response.data;
+      const data = response?.data || {};
+
+      if (data.success && data.admin) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(ADMIN_KEY, JSON.stringify(data.admin));
+        }
+        return { success: true, admin: data.admin };
+      }
+
+      return { success: false, error: 'Unauthorized.' };
     } catch {
+      // Clear invalid state
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(ADMIN_KEY);
+      }
+      delete axios.defaults.headers.common['Authorization'];
       return { success: false, error: 'Unauthorized.' };
     }
   },
 
   /**
    * POST /api/admin/logout
-   * Destroys admin session cookie
+   * Destroys admin session cookie and local token
    */
   async logout(): Promise<{ success: boolean }> {
     try {
-      const response = await axios.post('/api/admin/logout');
-      return response.data;
+      await axios.post('/api/admin/logout');
     } catch {
-      return { success: false };
+      // Proceed with local cleanup regardless
+    } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(ADMIN_KEY);
+      }
+      delete axios.defaults.headers.common['Authorization'];
     }
+    return { success: true };
   },
 
   /**
@@ -95,8 +172,13 @@ export const adminAuthService = {
    */
   async getDashboardStats(): Promise<{ success: boolean; data?: DashboardStats; error?: string }> {
     try {
+      const currentToken = this.getToken();
+      if (currentToken) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${currentToken}`;
+      }
+
       const response = await axios.get('/api/admin/dashboard/stats');
-      const payload = response.data;
+      const payload = response?.data || {};
       const stats: DashboardStats = {
         totalAnime: Number(payload?.totalAnime ?? payload?.stats?.totalAnime ?? 0),
         totalEpisodes: Number(payload?.totalEpisodes ?? payload?.stats?.totalEpisodes ?? 0),
@@ -106,9 +188,17 @@ export const adminAuthService = {
       return { success: true, data: stats };
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.data?.message) {
-        return { success: false, error: err.response.data.message };
+        return {
+          success: false,
+          error: err.response.data.message,
+          data: { totalAnime: 0, totalEpisodes: 0, publishedAnime: 0, draftAnime: 0 },
+        };
       }
-      return { success: false, error: 'Failed to fetch dashboard statistics.' };
+      return {
+        success: false,
+        error: 'Unable to load dashboard statistics.',
+        data: { totalAnime: 0, totalEpisodes: 0, publishedAnime: 0, draftAnime: 0 },
+      };
     }
   },
 };

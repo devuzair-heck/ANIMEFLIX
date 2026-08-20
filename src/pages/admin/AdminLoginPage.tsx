@@ -16,7 +16,7 @@ export const AdminLoginPage: React.FC = () => {
     e.preventDefault();
 
     if (!username.trim() || !password) {
-      setErrorMessage('Please enter both username and password.');
+      setErrorMessage('Invalid username or password.');
       return;
     }
 
@@ -26,14 +26,15 @@ export const AdminLoginPage: React.FC = () => {
     try {
       const response = await adminAuthService.login(username.trim(), password);
 
-      if (response.success) {
+      if (response && response.success) {
         // Direct redirect to admin dashboard (NO 2FA / NO OTP)
         navigate('/admin/dashboard', { replace: true });
       } else {
-        setErrorMessage(response.error || 'Invalid username or password.');
+        setErrorMessage(response?.error || 'Invalid username or password.');
       }
-    } catch {
-      setErrorMessage('Unable to connect to the server.');
+    } catch (err: unknown) {
+      console.error('[Admin Login] Exception during login:', err);
+      setErrorMessage('Unable to connect to the server. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -182,7 +183,7 @@ export const AdminLoginPage: React.FC = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Signing In...</span>
+                    <span>Signing in...</span>
                   </>
                 ) : (
                   <span>Sign In to Dashboard</span>

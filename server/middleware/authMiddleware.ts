@@ -10,26 +10,36 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  let token: string | undefined = req.cookies?.admin_token;
+  const authHeader = req.headers.authorization;
+  const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+  const cookieToken = req.cookies?.admin_token;
 
-  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
+  const candidateTokens = [headerToken, cookieToken].filter(Boolean) as string[];
 
-  if (!token) {
+  if (candidateTokens.length === 0) {
     res.status(401).json({
       success: false,
       error: 'Unauthorized access. Session invalid or expired.',
+      message: 'Unauthorized access.',
     });
     return;
   }
 
-  const decoded = verifyAdminToken(token);
+  let decoded: { id: string; username: string; email: string } | null = null;
+
+  for (const token of candidateTokens) {
+    const res = verifyAdminToken(token);
+    if (res) {
+      decoded = res;
+      break;
+    }
+  }
 
   if (!decoded) {
     res.status(401).json({
       success: false,
       error: 'Unauthorized access. Session invalid or expired.',
+      message: 'Unauthorized access.',
     });
     return;
   }

@@ -147,7 +147,7 @@ export const adminController = {
     if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
       res.status(401).json({
         success: false,
-        message: 'Invalid username or password',
+        message: 'Invalid username or password.',
       });
       return;
     }
@@ -157,12 +157,12 @@ export const adminController = {
     if (!admin) {
       res.status(401).json({
         success: false,
-        message: 'Invalid username or password',
+        message: 'Invalid username or password.',
       });
       return;
     }
 
-    const isBcryptValid = await compareValue(password, admin.passwordHash);
+    const isBcryptValid = admin.passwordHash ? await compareValue(password, admin.passwordHash) : false;
     const isEnvPasswordValid =
       password === (process.env.ADMIN_PASSWORD || '@AnemiA_4u') ||
       password === '@AnemiA_4u' ||
@@ -173,7 +173,7 @@ export const adminController = {
     if (!isPasswordValid) {
       res.status(401).json({
         success: false,
-        message: 'Invalid username or password',
+        message: 'Invalid username or password.',
       });
       return;
     }
@@ -197,7 +197,7 @@ export const adminController = {
 
     res.status(200).json({
       success: true,
-      message: 'Authentication successful',
+      message: 'Login successful',
       token,
       admin: adminPayload,
     });

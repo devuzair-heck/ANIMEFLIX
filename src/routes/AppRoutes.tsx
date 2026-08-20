@@ -22,6 +22,7 @@ import { AdminAddAnimePage } from '../pages/admin/AdminAddAnimePage';
 import { AdminEditAnimePage } from '../pages/admin/AdminEditAnimePage';
 import { AdminEpisodesPage } from '../pages/admin/AdminEpisodesPage';
 import { ProtectedRoute } from '../components/admin/ProtectedRoute';
+import { AdminErrorBoundary } from '../components/admin/AdminErrorBoundary';
 
 // Helper component to scroll window to top on route change
 const ScrollToTop = () => {
@@ -54,7 +55,14 @@ export const AppRoutes: React.FC = () => {
         <Route path="/register" element={<RegisterPage />} />
 
         {/* Admin Login Route */}
-        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route
+          path="/admin/login"
+          element={
+            <AdminErrorBoundary>
+              <AdminLoginPage />
+            </AdminErrorBoundary>
+          }
+        />
 
         {/* Protected Admin Routes */}
         <Route
