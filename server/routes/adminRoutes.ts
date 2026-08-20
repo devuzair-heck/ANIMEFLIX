@@ -11,5 +11,7 @@ router.post('/login', loginRateLimiter, adminController.login);
 // Protected Admin Endpoints
 router.get('/me', requireAdmin, adminController.getMe);
 router.post('/logout', requireAdmin, adminController.logout);
+router.get('/dashboard/stats', requireAdmin, adminController.getDashboardStats);
+router.get('/stats', requireAdmin, adminController.getDashboardStats);
 
 export default router;

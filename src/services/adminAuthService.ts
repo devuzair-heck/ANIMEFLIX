@@ -6,6 +6,13 @@ export interface AdminUser {
   email: string;
 }
 
+export interface DashboardStats {
+  totalAnime: number;
+  totalEpisodes: number;
+  publishedAnime: number;
+  draftAnime: number;
+}
+
 export interface AdminLoginResponse {
   success: boolean;
   message?: string;
@@ -79,6 +86,29 @@ export const adminAuthService = {
       return response.data;
     } catch {
       return { success: false };
+    }
+  },
+
+  /**
+   * GET /api/admin/dashboard/stats
+   * Fetches realtime statistics directly from MongoDB
+   */
+  async getDashboardStats(): Promise<{ success: boolean; data?: DashboardStats; error?: string }> {
+    try {
+      const response = await axios.get('/api/admin/dashboard/stats');
+      const payload = response.data;
+      const stats: DashboardStats = {
+        totalAnime: Number(payload?.totalAnime ?? payload?.stats?.totalAnime ?? 0),
+        totalEpisodes: Number(payload?.totalEpisodes ?? payload?.stats?.totalEpisodes ?? 0),
+        publishedAnime: Number(payload?.publishedAnime ?? payload?.stats?.publishedAnime ?? 0),
+        draftAnime: Number(payload?.draftAnime ?? payload?.stats?.draftAnime ?? 0),
+      };
+      return { success: true, data: stats };
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        return { success: false, error: err.response.data.message };
+      }
+      return { success: false, error: 'Failed to fetch dashboard statistics.' };
     }
   },
 };

@@ -49,7 +49,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
   const navItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Manage Anime', path: '/admin/anime', icon: Film },
+    { label: 'Anime Management', path: '/admin/anime', icon: Film },
     { label: 'Add Anime', path: '/admin/anime/add', icon: PlusCircle },
     { label: 'Episodes', path: '/admin/episodes', icon: ListVideo },
   ];
@@ -235,6 +235,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                     </Link>
                   );
                 })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    setShowSettingsModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold text-neutral-400 hover:text-white hover:bg-white/5 transition-colors text-left"
+                >
+                  <Settings className="w-4 h-4 shrink-0" />
+                  <span>Settings</span>
+                </button>
 
                 <Link
                   to="/"

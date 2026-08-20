@@ -5,8 +5,9 @@ export async function connectDB(): Promise<void> {
 
   try {
     mongoose.set('strictQuery', true);
+    mongoose.set('bufferCommands', false);
     await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 3000, // Timeout fast if local MongoDB server is offline
+      serverSelectionTimeoutMS: 1500, // Timeout fast if local MongoDB server is offline
     });
     console.log('[Database] MongoDB connected successfully.');
   } catch (err) {

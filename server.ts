@@ -35,9 +35,9 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
 
-  // Connect Database & Bootstrap Initial Admin
-  await connectDB();
-  await seedInitialAdmin();
+  // Connect Database & Bootstrap Initial Admin non-blockingly
+  connectDB().catch(() => {});
+  seedInitialAdmin().catch(() => {});
 
   // API Routes FIRST
   app.use('/api/admin', adminRoutes);

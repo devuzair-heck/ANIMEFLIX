@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { Anime, IAnime, IEpisode } from '../models/Anime.js';
+import { INITIAL_ANIME_SEED } from '../data/defaultCatalog.js';
 
 // In-memory fallback anime store for resilient operation when MongoDB is offline
-export const inMemoryAnimeList: IAnime[] = [];
+export const inMemoryAnimeList: IAnime[] = [...(INITIAL_ANIME_SEED as unknown as IAnime[])];
 
 /**
  * Helper to seed initial anime catalog if database is empty

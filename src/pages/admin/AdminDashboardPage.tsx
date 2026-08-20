@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Film,
   ListVideo,
-  Users,
+  FileEdit,
   CheckCircle2,
   PlusCircle,
   TrendingUp,
@@ -15,22 +15,50 @@ import {
   Eye,
   AlertCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { animeService } from '../../services/animeService';
+import { adminAuthService, DashboardStats } from '../../services/adminAuthService';
 import { Anime } from '../../types/anime';
 
 export const AdminDashboardPage: React.FC = () => {
   const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalAnime: 0,
+    totalEpisodes: 0,
+    publishedAnime: 0,
+    draftAnime: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Anime | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const data = await animeService.getAllAnime();
-      setAnimeList(data);
+      // Fetch both catalog and dynamic backend metrics
+      const [animes, statsRes] = await Promise.all([
+        animeService.getAllAnime(),
+        adminAuthService.getDashboardStats(),
+      ]);
+
+      setAnimeList(animes);
+
+      if (statsRes.success && statsRes.data) {
+        setStats(statsRes.data);
+      } else {
+        // Fallback calculation directly from fetched catalog
+        const totalEp = animes.reduce((acc, a) => acc + (a.episodes?.length || a.episodesCount || 0), 0);
+        const draftCount = animes.filter((a) => (a as any).status === 'Draft' || (a as any).isPublished === false).length;
+        setStats({
+          totalAnime: animes.length,
+          totalEpisodes: totalEp,
+          publishedAnime: animes.length - draftCount,
+          draftAnime: draftCount,
+        });
+      }
     } catch {
       // Handled
     } finally {
@@ -42,10 +70,19 @@ export const AdminDashboardPage: React.FC = () => {
     loadData();
   }, []);
 
-  const totalAnime = animeList.length;
-  const totalEpisodes = animeList.reduce((acc, a) => acc + (a.episodes?.length || a.episodesCount || 0), 0);
-  const totalUsers = 1420; // Active platform community
-  const publishedAnime = animeList.filter((a) => a.status === 'Completed' || a.status === 'Ongoing').length;
+  const refreshStats = async () => {
+    setIsRefreshingStats(true);
+    try {
+      const statsRes = await adminAuthService.getDashboardStats();
+      if (statsRes.success && statsRes.data) {
+        setStats(statsRes.data);
+      }
+    } catch {
+      // Handled
+    } finally {
+      setIsRefreshingStats(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -54,6 +91,8 @@ export const AdminDashboardPage: React.FC = () => {
       await animeService.deleteAnime(deleteTarget.id);
       setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
       setDeleteTarget(null);
+      // Refresh stats after deletion
+      await refreshStats();
     } catch {
       // Handled
     } finally {
@@ -111,61 +150,79 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          {/* Total Anime */}
-          <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Anime</span>
-              <div className="w-9 h-9 rounded-xl bg-red-500/10 text-[#DC143C] flex items-center justify-center">
-                <Film className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-4">
-              <span className="text-3xl font-black text-white tracking-tight">{totalAnime}</span>
-              <span className="text-[11px] text-neutral-400 block mt-0.5">Active titles in database</span>
-            </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+              Live Database Metrics
+            </h3>
+            <button
+              type="button"
+              onClick={refreshStats}
+              disabled={isRefreshingStats}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-neutral-400 hover:text-white px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+              title="Refresh MongoDB Stats"
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshingStats ? 'animate-spin text-[#DC143C]' : ''}`} />
+              <span>Refresh Metrics</span>
+            </button>
           </div>
 
-          {/* Total Episodes */}
-          <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Episodes</span>
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-                <ListVideo className="w-4 h-4" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Total Anime */}
+            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Anime</span>
+                <div className="w-9 h-9 rounded-xl bg-red-500/10 text-[#DC143C] flex items-center justify-center">
+                  <Film className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-3xl font-black text-white tracking-tight">{stats.totalAnime}</span>
+                <span className="text-[11px] text-neutral-400 block mt-0.5">Active titles in database</span>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-3xl font-black text-white tracking-tight">{totalEpisodes}</span>
-              <span className="text-[11px] text-neutral-400 block mt-0.5">Streamable episodes</span>
-            </div>
-          </div>
 
-          {/* Total Users */}
-          <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Users</span>
-              <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
-                <Users className="w-4 h-4" />
+            {/* Total Episodes */}
+            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Total Episodes</span>
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+                  <ListVideo className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-3xl font-black text-white tracking-tight">{stats.totalEpisodes}</span>
+                <span className="text-[11px] text-neutral-400 block mt-0.5">Streamable episodes</span>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-3xl font-black text-white tracking-tight">{totalUsers}</span>
-              <span className="text-[11px] text-neutral-400 block mt-0.5">Community accounts</span>
-            </div>
-          </div>
 
-          {/* Published Anime */}
-          <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Published Anime</span>
-              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4" />
+            {/* Published Anime */}
+            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Published Anime</span>
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-3xl font-black text-white tracking-tight">{stats.publishedAnime}</span>
+                <span className="text-[11px] text-neutral-400 block mt-0.5">Live on website</span>
               </div>
             </div>
-            <div className="mt-4">
-              <span className="text-3xl font-black text-white tracking-tight">{publishedAnime}</span>
-              <span className="text-[11px] text-neutral-400 block mt-0.5">Live on website</span>
+
+            {/* Draft Anime */}
+            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">Draft Anime</span>
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                  <FileEdit className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-4">
+                <span className="text-3xl font-black text-white tracking-tight">{stats.draftAnime}</span>
+                <span className="text-[11px] text-neutral-400 block mt-0.5">Unpublished drafts</span>
+              </div>
             </div>
           </div>
         </div>

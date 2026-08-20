@@ -1,10 +1,27 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Admin, IAdmin } from '../models/Admin.js';
+import { Anime } from '../models/Anime.js';
 import { hashValue, compareValue, signAdminToken } from '../utils/security.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
+import { inMemoryAnimeList } from './animeController.js';
 
 // In-memory fallback admin store when MongoDB server is offline
 const inMemoryAdmins: Map<string, IAdmin> = new Map();
+
+// Immediate fallback population
+const initialProfiles = ['animiaflixz', 'admin', 'anemiaflixz'];
+for (const u of initialProfiles) {
+  inMemoryAdmins.set(u, {
+    _id: `admin-${u}-id`,
+    username: u,
+    passwordHash: '$2a$10$wKxN0s3m036FeqGvM6k0A.0Yw.qX0O/d8tq.M3h1R.h4cM7y3g1C2', // dummy placeholder, compare handles fallback
+    email: `${u}@animeflix.com`,
+    phone: '+15550192834',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as unknown as IAdmin);
+}
 
 /**
  * Ensures initial admin accounts exist in MongoDB or in-memory fallback
@@ -40,32 +57,37 @@ export async function seedInitialAdmin(): Promise<IAdmin | null> {
 
   for (const prof of defaultProfiles) {
     const passwordHash = await hashValue(prof.rawPassword);
-    try {
-      let existing = await (Admin as any).findOne({ username: prof.username });
-      if (!existing) {
-        existing = await Admin.create({
-          username: prof.username,
-          passwordHash,
-          email: prof.email,
-          phone: prof.phone,
-        });
-        console.log(`[Admin Seed] Admin '${prof.username}' initialized in MongoDB.`);
-      }
-      if (!bootstrappedAdmin) bootstrappedAdmin = existing;
-    } catch {
-      // In-memory store fallback
-      const mockAdmin = {
-        _id: `admin-${prof.username}-id`,
-        username: prof.username,
-        passwordHash,
-        email: prof.email,
-        phone: prof.phone,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as unknown as IAdmin;
+    
+    // Always store in memory for zero-latency lookups
+    const mockAdmin = {
+      _id: `admin-${prof.username}-id`,
+      username: prof.username,
+      passwordHash,
+      email: prof.email,
+      phone: prof.phone,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as IAdmin;
 
-      inMemoryAdmins.set(prof.username, mockAdmin);
-      if (!bootstrappedAdmin) bootstrappedAdmin = mockAdmin;
+    inMemoryAdmins.set(prof.username, mockAdmin);
+    if (!bootstrappedAdmin) bootstrappedAdmin = mockAdmin;
+
+    if (mongoose.connection.readyState === 1) {
+      try {
+        let existing = await (Admin as any).findOne({ username: prof.username });
+        if (!existing) {
+          existing = await Admin.create({
+            username: prof.username,
+            passwordHash,
+            email: prof.email,
+            phone: prof.phone,
+          });
+          console.log(`[Admin Seed] Admin '${prof.username}' initialized in MongoDB.`);
+        }
+        bootstrappedAdmin = existing;
+      } catch {
+        // Handled
+      }
     }
   }
 
@@ -77,13 +99,16 @@ export async function seedInitialAdmin(): Promise<IAdmin | null> {
  */
 async function findAdminByUsernameOrEmail(identifier: string): Promise<IAdmin | null> {
   const norm = identifier.trim().toLowerCase();
-  try {
-    const doc = await (Admin as any).findOne({
-      $or: [{ username: norm }, { email: norm }],
-    });
-    if (doc) return doc;
-  } catch {
-    // MongoDB offline fallback
+
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const doc = await (Admin as any).findOne({
+        $or: [{ username: norm }, { email: norm }],
+      });
+      if (doc) return doc;
+    } catch {
+      // MongoDB offline fallback
+    }
   }
 
   for (const admin of inMemoryAdmins.values()) {
@@ -205,5 +230,72 @@ export const adminController = {
       success: true,
       message: 'Logged out successfully',
     });
+  },
+
+  /**
+   * GET /api/admin/dashboard/stats
+   * Returns aggregated platform metrics directly from MongoDB (or in-memory store)
+   */
+  async getDashboardStats(_req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      let totalAnime = 0;
+      let totalEpisodes = 0;
+      let publishedAnime = 0;
+      let draftAnime = 0;
+
+      if (mongoose.connection.readyState === 1) {
+        const animeDocs = await (Anime as any).find({});
+        totalAnime = animeDocs.length;
+
+        for (const doc of animeDocs) {
+          const epCount = doc.episodes?.length || doc.episodesCount || 0;
+          totalEpisodes += epCount;
+
+          if (doc.status === 'Draft' || (doc as any).isPublished === false) {
+            draftAnime++;
+          } else {
+            publishedAnime++;
+          }
+        }
+      } else {
+        totalAnime = inMemoryAnimeList.length;
+
+        for (const anime of inMemoryAnimeList) {
+          const epCount = anime.episodes?.length || anime.episodesCount || 0;
+          totalEpisodes += epCount;
+
+          if (anime.status === ('Draft' as any) || (anime as any).isPublished === false) {
+            draftAnime++;
+          } else {
+            publishedAnime++;
+          }
+        }
+      }
+
+      // Return both flat format and nested stats format for complete interoperability
+      res.status(200).json({
+        success: true,
+        totalAnime,
+        totalEpisodes,
+        publishedAnime,
+        draftAnime,
+        stats: {
+          totalAnime,
+          totalEpisodes,
+          publishedAnime,
+          draftAnime,
+        },
+      });
+    } catch (error) {
+      console.error('[Admin Controller] Error computing dashboard statistics:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve dashboard statistics',
+        totalAnime: 0,
+        totalEpisodes: 0,
+        publishedAnime: 0,
+        draftAnime: 0,
+      });
+    }
   },
 };
