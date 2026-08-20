@@ -33,7 +33,6 @@ export class AdminErrorBoundary extends React.Component<Props, State> {
 
   private handleRetry = () => {
     this.setState({ hasError: false, errorMessage: '' });
-    window.location.reload();
   };
 
   public override render() {
@@ -64,7 +63,7 @@ export class AdminErrorBoundary extends React.Component<Props, State> {
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-[#DC143C] hover:bg-[#b01030] text-white text-xs font-black uppercase tracking-wider px-5 py-3 rounded-xl transition-all shadow-lg shadow-[#DC143C]/20 cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>Retry / Reload</span>
+                <span>Retry</span>
               </button>
 
               <Link

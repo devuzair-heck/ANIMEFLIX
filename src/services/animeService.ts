@@ -1,13 +1,10 @@
-import axios from 'axios';
+import { apiClient } from './apiConfig';
 import { Anime, Episode } from '../types/anime';
 import { DEMO_ANIME } from '../utils/animeData';
-
-axios.defaults.withCredentials = true;
 
 // Helper to keep local DEMO_ANIME synchronized
 function syncLocalCatalog(updatedList: Anime[]) {
   if (Array.isArray(updatedList) && updatedList.length > 0) {
-    // Preserve existing references or update in place
     DEMO_ANIME.length = 0;
     updatedList.forEach((a) => DEMO_ANIME.push(a));
   }
@@ -25,7 +22,7 @@ export const animeService = {
     sortBy?: string;
   }): Promise<Anime[]> {
     try {
-      const response = await axios.get<{ success: boolean; data: Anime[] }>('/api/anime', { params });
+      const response = await apiClient.get<{ success: boolean; data: Anime[] }>('/api/anime', { params });
       if (response.data.success && Array.isArray(response.data.data) && response.data.data.length > 0) {
         syncLocalCatalog(response.data.data);
         return response.data.data;
@@ -41,7 +38,7 @@ export const animeService = {
    */
   async getAnimeById(id: string): Promise<Anime | null> {
     try {
-      const response = await axios.get<{ success: boolean; data: Anime }>(`/api/anime/${id}`);
+      const response = await apiClient.get<{ success: boolean; data: Anime }>(`/api/anime/${id}`);
       if (response.data.success && response.data.data) {
         return response.data.data;
       }
@@ -56,9 +53,8 @@ export const animeService = {
    */
   async createAnime(animeData: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; message?: string }> {
     try {
-      const response = await axios.post<{ success: boolean; data: Anime; message: string }>('/api/anime', animeData);
+      const response = await apiClient.post<{ success: boolean; data: Anime; message: string }>('/api/anime', animeData);
       if (response.data.success && response.data.data) {
-        // Sync locally
         const created = response.data.data;
         const exists = DEMO_ANIME.some((a) => a.id === created.id);
         if (!exists) {
@@ -67,7 +63,7 @@ export const animeService = {
         return { success: true, data: created, message: response.data.message };
       }
       return { success: false, message: response.data.message || 'Failed to create anime.' };
-    } catch (err: any) {
+    } catch {
       // Offline local creation fallback
       const generatedId = animeData.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `anime-${Date.now()}`;
       const newAnime: Anime = {
@@ -105,7 +101,7 @@ export const animeService = {
    */
   async updateAnime(id: string, updates: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; message?: string }> {
     try {
-      const response = await axios.put<{ success: boolean; data: Anime; message: string }>(`/api/anime/${id}`, updates);
+      const response = await apiClient.put<{ success: boolean; data: Anime; message: string }>(`/api/anime/${id}`, updates);
       if (response.data.success && response.data.data) {
         const updated = response.data.data;
         const index = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
@@ -132,7 +128,7 @@ export const animeService = {
    */
   async deleteAnime(id: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await axios.delete<{ success: boolean; message: string }>(`/api/anime/${id}`);
+      const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/anime/${id}`);
       if (response.data.success) {
         const idx = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
         if (idx !== -1) DEMO_ANIME.splice(idx, 1);
@@ -155,7 +151,7 @@ export const animeService = {
    */
   async getAllEpisodes(animeId?: string): Promise<Array<Episode & { animeId: string; animeTitle: string }>> {
     try {
-      const response = await axios.get<{ success: boolean; data: any[] }>('/api/episodes', {
+      const response = await apiClient.get<{ success: boolean; data: any[] }>('/api/episodes', {
         params: { animeId },
       });
       if (response.data.success && Array.isArray(response.data.data)) {
@@ -186,7 +182,7 @@ export const animeService = {
    */
   async addEpisode(animeId: string, episodeData: Partial<Episode> & { [key: string]: any }): Promise<{ success: boolean; data?: Episode; message?: string }> {
     try {
-      const response = await axios.post<{ success: boolean; data: Episode; message: string }>('/api/episodes', {
+      const response = await apiClient.post<{ success: boolean; data: Episode; message: string }>('/api/episodes', {
         animeId,
         ...episodeData,
       });
@@ -229,7 +225,7 @@ export const animeService = {
    */
   async updateEpisode(episodeId: string, updates: Partial<Episode> & { [key: string]: any }): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await axios.put<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`, updates);
+      const response = await apiClient.put<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`, updates);
       if (response.data.success) {
         for (const a of DEMO_ANIME) {
           if (!a.episodes) continue;
@@ -262,7 +258,7 @@ export const animeService = {
    */
   async deleteEpisode(episodeId: string): Promise<{ success: boolean; message?: string }> {
     try {
-      const response = await axios.delete<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`);
+      const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`);
       if (response.data.success) {
         for (const a of DEMO_ANIME) {
           if (!a.episodes) continue;
