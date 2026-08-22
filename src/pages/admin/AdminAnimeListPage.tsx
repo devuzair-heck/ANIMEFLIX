@@ -53,19 +53,26 @@ export const AdminAnimeListPage: React.FC = () => {
     fetchAnime();
   }, []);
 
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
+    setActionError(null);
     try {
       const res = await animeService.deleteAnime(deleteTarget.id);
       if (res.success) {
         setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
-        setActionMessage('Anime deleted successfully.');
+        setActionMessage(res.message || 'Anime deleted successfully.');
         setTimeout(() => setActionMessage(null), 4000);
+      } else {
+        setActionError(res.message || 'Failed to delete anime. Please try again.');
+        setTimeout(() => setActionError(null), 5000);
       }
       setDeleteTarget(null);
-    } catch {
-      // Handled
+    } catch (err: any) {
+      setActionError(err?.message || 'Error occurred while deleting anime.');
+      setTimeout(() => setActionError(null), 5000);
     } finally {
       setIsDeleting(false);
     }
@@ -147,6 +154,13 @@ export const AdminAnimeListPage: React.FC = () => {
           <div className="bg-emerald-950/50 border border-emerald-500/30 text-emerald-300 px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{actionMessage}</span>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="bg-red-950/50 border border-red-500/30 text-red-300 px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{actionError}</span>
           </div>
         )}
 

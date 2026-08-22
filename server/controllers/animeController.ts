@@ -322,16 +322,41 @@ export const animeController = {
   async deleteAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
+      return;
+    }
+
     try {
+      const cleanId = id.trim();
       let deleted = false;
+
+      // 1. Try finding and deleting from MongoDB with multiple matching identifiers
       try {
-        const resDb = await (Anime as any).deleteOne({ $or: [{ id }, { slug: id }] });
-        if (resDb.deletedCount > 0) deleted = true;
-      } catch {
-        // In-memory fallback
+        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
+        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
+          queryConditions.push({ _id: cleanId });
+        }
+
+        // First find the doc in MongoDB if it exists
+        const existingDoc = await (Anime as any).findOne({ $or: queryConditions });
+        if (existingDoc) {
+          await (Anime as any).deleteOne({ _id: existingDoc._id });
+          deleted = true;
+        } else {
+          const resDb = await (Anime as any).deleteOne({ $or: queryConditions });
+          if (resDb.deletedCount > 0) {
+            deleted = true;
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[Anime Delete] MongoDB operation note:', dbErr);
       }
 
-      const memIndex = inMemoryAnimeList.findIndex((a) => a.id === id || a.slug === id);
+      // 2. Also remove from inMemoryAnimeList fallback store if present
+      const memIndex = inMemoryAnimeList.findIndex(
+        (a) => a.id === cleanId || a.slug === cleanId || (a as any)._id === cleanId
+      );
       if (memIndex !== -1) {
         inMemoryAnimeList.splice(memIndex, 1);
         deleted = true;
@@ -346,8 +371,9 @@ export const animeController = {
         success: true,
         message: 'Anime deleted successfully',
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to delete anime' });
+    } catch (err: any) {
+      console.error('[Anime Delete Error]', err);
+      res.status(500).json({ success: false, message: err?.message || 'Failed to delete anime' });
     }
   },
 
