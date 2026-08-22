@@ -45,8 +45,9 @@ async function startServer() {
   app.use('/api/episodes', episodeRoutes);
 
   app.get('/api/health', (_req, res) => {
-    res.json({
-      status: 'ok',
+    res.status(200).json({
+      success: true,
+      message: 'AnimeFlix API is running',
       service: 'AnimeFlix API',
       timestamp: new Date().toISOString(),
     });

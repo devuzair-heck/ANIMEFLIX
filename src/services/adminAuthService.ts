@@ -59,7 +59,17 @@ export const adminAuthService = {
         password,
       });
 
-      const data: AdminLoginResponse = response?.data || { success: false };
+      const rawData = response?.data;
+
+      // Guard against HTML SPA fallback responses (e.g. <!DOCTYPE html> instead of JSON)
+      if (!rawData || typeof rawData !== 'object' || typeof rawData === 'string') {
+        return {
+          success: false,
+          error: 'API route not found or returned invalid response. Please verify backend API configuration.',
+        };
+      }
+
+      const data: AdminLoginResponse = rawData;
 
       if (data.success && data.token) {
         if (typeof window !== 'undefined') {
@@ -68,13 +78,17 @@ export const adminAuthService = {
             localStorage.setItem(ADMIN_KEY, JSON.stringify(data.admin));
           }
         }
+        return {
+          success: true,
+          message: data.message || 'Login successful',
+          token: data.token,
+          admin: data.admin,
+        };
       }
 
       return {
-        success: Boolean(data.success),
-        message: data.message || 'Login successful',
-        token: data.token,
-        admin: data.admin,
+        success: false,
+        error: data.message || data.error || 'Invalid username or password.',
       };
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -93,7 +107,7 @@ export const adminAuthService = {
         if (err.response.status === 404) {
           return {
             success: false,
-            error: 'Admin login service was not found. Please check the backend API configuration.',
+            error: 'API route not found. Please check the backend API configuration.',
           };
         }
         if (err.response.status === 500) {
@@ -109,7 +123,20 @@ export const adminAuthService = {
             error: errorData.message || errorData.error || 'Invalid request. Please check your credentials.',
           };
         }
-        const errorData = (err.response.data as { error?: string; message?: string }) || {};
+        if (err.response.status === 405) {
+          return {
+            success: false,
+            error: 'HTTP Method Not Allowed on API route.',
+          };
+        }
+        if (err.response.status === 502 || err.response.status === 503 || err.response.status === 504) {
+          return {
+            success: false,
+            error: 'Backend service is currently unavailable. Please try again.',
+          };
+        }
+
+        const errorData = typeof err.response.data === 'object' ? (err.response.data as { error?: string; message?: string }) : {};
         return {
           success: false,
           error: errorData.message || errorData.error || 'Something went wrong. Please try again.',
