@@ -4,11 +4,10 @@ import {
   PlusCircle,
   ArrowLeft,
   Loader2,
-  Film,
-  Sparkles,
-  CheckCircle2,
-  ShieldAlert,
   Image as ImageIcon,
+  ShieldAlert,
+  Save,
+  CheckCircle2,
 } from 'lucide-react';
 import { AdminLayout } from './AdminLayout';
 import { animeService } from '../../services/animeService';
@@ -17,24 +16,31 @@ import { GENRES_LIST } from '../../utils/animeData';
 export const AdminAddAnimePage: React.FC = () => {
   const navigate = useNavigate();
 
+  // Form State
   const [title, setTitle] = useState('');
   const [japaneseTitle, setJapaneseTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
-  const [releaseYear, setReleaseYear] = useState<number>(new Date().getFullYear());
-  const [status, setStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
-  const [rating, setRating] = useState<number>(8.5);
-  const [totalEpisodes, setTotalEpisodes] = useState<number>(12);
-  const [type, setType] = useState<'TV' | 'Movie' | 'OVA'>('TV');
-  const [studio, setStudio] = useState('MAPPA');
-  const [duration, setDuration] = useState('24m');
-  const [language, setLanguage] = useState('Japanese (Sub/Dub)');
   const [posterImage, setPosterImage] = useState('https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80');
   const [bannerImage, setBannerImage] = useState('https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1600&auto=format&fit=crop&q=80');
-  const [trailerUrl, setTrailerUrl] = useState('https://www.youtube.com/watch?v=MGRm4IzK1SQ');
+  const [releaseYear, setReleaseYear] = useState<number>(new Date().getFullYear());
+  const [status, setStatus] = useState<'Ongoing' | 'Completed'>('Ongoing');
+  const [type, setType] = useState<'TV' | 'Movie' | 'OVA'>('TV');
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
+  const [rating, setRating] = useState<number>(8.5);
+  const [duration, setDuration] = useState('24m');
+  const [totalEpisodes, setTotalEpisodes] = useState<number>(12);
+  const [language, setLanguage] = useState('Japanese');
+  const [isSubbed, setIsSubbed] = useState(true);
+  const [isDubbed, setIsDubbed] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isTrending, setIsTrending] = useState(true);
   const [isPopular, setIsPopular] = useState(true);
+  const [studio, setStudio] = useState('MAPPA');
+  const [trailerUrl, setTrailerUrl] = useState('');
+
+  // Image load error states for preview
+  const [posterError, setPosterError] = useState(false);
+  const [bannerError, setBannerError] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -48,6 +54,7 @@ export const AdminAddAnimePage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Field validations
     if (!title.trim()) {
       setErrorMessage('Anime Title is required.');
       return;
@@ -56,8 +63,16 @@ export const AdminAddAnimePage: React.FC = () => {
       setErrorMessage('Description is required.');
       return;
     }
+    if (!posterImage.trim()) {
+      setErrorMessage('Poster Image URL is required.');
+      return;
+    }
     if (selectedGenres.length === 0) {
       setErrorMessage('Please select at least one genre.');
+      return;
+    }
+    if (!releaseYear || releaseYear < 1960 || releaseYear > 2030) {
+      setErrorMessage('Please enter a valid Release Year between 1960 and 2030.');
       return;
     }
 
@@ -69,22 +84,24 @@ export const AdminAddAnimePage: React.FC = () => {
         title: title.trim(),
         japaneseTitle: japaneseTitle.trim(),
         description: description.trim(),
-        genres: selectedGenres,
-        year: Number(releaseYear) || new Date().getFullYear(),
-        status,
-        rating: Number(rating) || 8.0,
-        episodesCount: Number(totalEpisodes) || 12,
-        type,
-        studio: studio.trim() || 'Unknown Studio',
-        duration: duration.trim() || '24m',
-        language: language.trim() || 'Japanese',
         poster: posterImage.trim(),
-        banner: bannerImage.trim(),
-        trailerUrl: trailerUrl.trim(),
+        banner: bannerImage.trim() || posterImage.trim(),
+        year: Number(releaseYear),
+        status,
+        type,
+        genres: selectedGenres,
+        rating: Number(rating) || 8.0,
+        duration: duration.trim() || '24m',
+        episodesCount: Number(totalEpisodes) || 12,
+        language: language.trim() || 'Japanese',
+        isSubbed,
+        isDubbed,
         featuredInHero: isFeatured,
         isTrending,
         isPopular,
         isTopRated: Number(rating) >= 8.5,
+        studio: studio.trim() || 'Unknown Studio',
+        trailerUrl: trailerUrl.trim(),
         isRecentlyAdded: true,
       };
 
@@ -92,10 +109,10 @@ export const AdminAddAnimePage: React.FC = () => {
       if (res.success) {
         navigate('/admin/anime', { replace: true });
       } else {
-        setErrorMessage(res.message || 'Failed to create anime entry.');
+        setErrorMessage(res.message || 'Failed to add anime.');
       }
     } catch {
-      setErrorMessage('Failed to create anime due to server error.');
+      setErrorMessage('Failed to connect to the server while adding anime.');
     } finally {
       setIsSubmitting(false);
     }
@@ -112,11 +129,11 @@ export const AdminAddAnimePage: React.FC = () => {
             className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neutral-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Anime Catalog</span>
+            <span>Back to Anime Management</span>
           </Link>
         </div>
 
-        {/* Form Container */}
+        {/* Form Card */}
         <div className="bg-[#111111] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-xl">
           
           <div className="mb-6 pb-4 border-b border-white/10">
@@ -127,10 +144,10 @@ export const AdminAddAnimePage: React.FC = () => {
             </div>
             <h1 className="text-2xl font-black uppercase italic tracking-tight text-white flex items-center gap-2">
               <PlusCircle className="w-5 h-5 text-[#DC143C]" />
-              <span>Add New Anime Title</span>
+              <span>Add Anime</span>
             </h1>
             <p className="text-xs text-neutral-400 mt-1">
-              Provide metadata, cover imagery, and streaming attributes to publish a new series.
+              Create a new anime title with complete metadata, streaming details, and showcase options.
             </p>
           </div>
 
@@ -147,16 +164,16 @@ export const AdminAddAnimePage: React.FC = () => {
             {/* Primary Details Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
-              {/* Anime Title */}
+              {/* Title */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Anime Title <span className="text-[#DC143C]">*</span>
+                  Title <span className="text-[#DC143C]">*</span>
                 </label>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Solo Leveling"
+                  placeholder="e.g. Demon Slayer: Kimetsu no Yaiba"
                   required
                   className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#DC143C]"
                 />
@@ -171,7 +188,7 @@ export const AdminAddAnimePage: React.FC = () => {
                   type="text"
                   value={japaneseTitle}
                   onChange={(e) => setJapaneseTitle(e.target.value)}
-                  placeholder="e.g. 俺だけレベルアップな件 (Ore dake Level Up na Ken)"
+                  placeholder="e.g. 鬼滅の刃"
                   className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#DC143C]"
                 />
               </div>
@@ -180,22 +197,108 @@ export const AdminAddAnimePage: React.FC = () => {
             {/* Description */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                Description / Synopsis <span className="text-[#DC143C]">*</span>
+                Description <span className="text-[#DC143C]">*</span>
               </label>
               <textarea
                 rows={4}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Write a captivating summary of the storyline and plot..."
+                placeholder="Enter storyline, plot synopsis, and background lore..."
                 required
                 className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#DC143C] resize-none"
               />
             </div>
 
+            {/* Live Image Previews Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#161616] rounded-2xl border border-white/5">
+              
+              {/* Poster URL + Live Preview */}
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300">
+                  Poster Image URL <span className="text-[#DC143C]">*</span>
+                </label>
+                <input
+                  type="url"
+                  value={posterImage}
+                  onChange={(e) => {
+                    setPosterImage(e.target.value);
+                    setPosterError(false);
+                  }}
+                  placeholder="https://... (JPG/PNG/WebP)"
+                  required
+                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#DC143C]"
+                />
+                
+                {/* Live Preview Box */}
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="w-20 h-28 rounded-lg bg-neutral-900 border border-white/10 overflow-hidden flex items-center justify-center shrink-0 relative">
+                    {posterImage && !posterError ? (
+                      <img
+                        src={posterImage}
+                        alt="Poster Preview"
+                        className="w-full h-full object-cover"
+                        onError={() => setPosterError(true)}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-neutral-600 p-2 text-center">
+                        <ImageIcon className="w-6 h-6 mb-1" />
+                        <span className="text-[9px] uppercase font-bold">No Preview</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-400">
+                    <span className="font-bold text-white block">Poster Live Preview</span>
+                    <span className="text-[11px] text-neutral-500">Vertical orientation (3:4 ratio)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Banner URL + Live Preview */}
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300">
+                  Banner Image URL
+                </label>
+                <input
+                  type="url"
+                  value={bannerImage}
+                  onChange={(e) => {
+                    setBannerImage(e.target.value);
+                    setBannerError(false);
+                  }}
+                  placeholder="https://... (Wide Banner)"
+                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#DC143C]"
+                />
+
+                {/* Live Preview Box */}
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="w-40 h-24 rounded-lg bg-neutral-900 border border-white/10 overflow-hidden flex items-center justify-center shrink-0 relative">
+                    {bannerImage && !bannerError ? (
+                      <img
+                        src={bannerImage}
+                        alt="Banner Preview"
+                        className="w-full h-full object-cover"
+                        onError={() => setBannerError(true)}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-neutral-600 p-2 text-center">
+                        <ImageIcon className="w-6 h-6 mb-1" />
+                        <span className="text-[9px] uppercase font-bold">No Banner</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-400">
+                    <span className="font-bold text-white block">Banner Live Preview</span>
+                    <span className="text-[11px] text-neutral-500">Widescreen hero (16:9 ratio)</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
             {/* Genres Selector */}
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-2">
-                Select Genres <span className="text-[#DC143C]">*</span>
+                Genres <span className="text-[#DC143C]">*</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {GENRES_LIST.map((g) => {
@@ -221,10 +324,10 @@ export const AdminAddAnimePage: React.FC = () => {
             {/* Attributes Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               
-              {/* Release Year */}
+              {/* Year */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Release Year <span className="text-[#DC143C]">*</span>
+                  Year <span className="text-[#DC143C]">*</span>
                 </label>
                 <input
                   type="number"
@@ -239,7 +342,7 @@ export const AdminAddAnimePage: React.FC = () => {
               {/* Status */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Status
+                  Status <span className="text-[#DC143C]">*</span>
                 </label>
                 <select
                   value={status}
@@ -248,6 +351,22 @@ export const AdminAddAnimePage: React.FC = () => {
                 >
                   <option value="Ongoing">Ongoing</option>
                   <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
+                  Type
+                </label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value as any)}
+                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
+                >
+                  <option value="TV">TV Series</option>
+                  <option value="Movie">Movie</option>
+                  <option value="OVA">OVA / Special</option>
                 </select>
               </div>
 
@@ -266,11 +385,15 @@ export const AdminAddAnimePage: React.FC = () => {
                   className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
                 />
               </div>
+            </div>
 
+            {/* Total Episodes, Duration, Language, Studio */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              
               {/* Total Episodes */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Total Episodes <span className="text-[#DC143C]">*</span>
+                  Total Episodes
                 </label>
                 <input
                   type="number"
@@ -281,38 +404,8 @@ export const AdminAddAnimePage: React.FC = () => {
                   className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
                 />
               </div>
-            </div>
 
-            {/* Studio, Duration, Type, Language */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Type
-                </label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as any)}
-                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
-                >
-                  <option value="TV">TV Series</option>
-                  <option value="Movie">Movie</option>
-                  <option value="OVA">OVA / Special</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Studio
-                </label>
-                <input
-                  type="text"
-                  value={studio}
-                  onChange={(e) => setStudio(e.target.value)}
-                  placeholder="e.g. Ufotable, MAPPA"
-                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
-                />
-              </div>
-
+              {/* Duration */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
                   Duration
@@ -326,6 +419,7 @@ export const AdminAddAnimePage: React.FC = () => {
                 />
               </div>
 
+              {/* Language */}
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
                   Language
@@ -334,60 +428,57 @@ export const AdminAddAnimePage: React.FC = () => {
                   type="text"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
-                  placeholder="e.g. Japanese (Sub/Dub)"
+                  placeholder="e.g. Japanese"
+                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
+                />
+              </div>
+
+              {/* Studio */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
+                  Studio
+                </label>
+                <input
+                  type="text"
+                  value={studio}
+                  onChange={(e) => setStudio(e.target.value)}
+                  placeholder="e.g. MAPPA, Ufotable"
                   className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
                 />
               </div>
             </div>
 
-            {/* Media URLs */}
-            <div className="space-y-4 pt-2">
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Poster Image URL
-                </label>
-                <input
-                  type="url"
-                  value={posterImage}
-                  onChange={(e) => setPosterImage(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Banner Image URL
-                </label>
-                <input
-                  type="url"
-                  value={bannerImage}
-                  onChange={(e) => setBannerImage(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-300 mb-1.5">
-                  Trailer Video URL (YouTube / MP4)
-                </label>
-                <input
-                  type="url"
-                  value={trailerUrl}
-                  onChange={(e) => setTrailerUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full bg-[#181818] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#DC143C]"
-                />
-              </div>
-            </div>
-
-            {/* Feature Flags */}
-            <div className="p-4 bg-neutral-900/50 rounded-2xl border border-white/5 space-y-3">
+            {/* Sub/Dub & Flags */}
+            <div className="p-4 bg-neutral-900/50 rounded-2xl border border-white/5 space-y-4">
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 block">
-                Showcase & Visibility Badges
+                Sub / Dub & Showcase Visibility
               </span>
+              
               <div className="flex flex-wrap items-center gap-6">
+                
+                {/* Subbed */}
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={isSubbed}
+                    onChange={(e) => setIsSubbed(e.target.checked)}
+                    className="rounded bg-[#181818] border-white/20 text-[#DC143C] focus:ring-0 w-4 h-4 cursor-pointer"
+                  />
+                  <span>Subtitled (Sub)</span>
+                </label>
+
+                {/* Dubbed */}
+                <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={isDubbed}
+                    onChange={(e) => setIsDubbed(e.target.checked)}
+                    className="rounded bg-[#181818] border-white/20 text-[#DC143C] focus:ring-0 w-4 h-4 cursor-pointer"
+                  />
+                  <span>Dubbed (Dub)</span>
+                </label>
+
+                {/* Featured */}
                 <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-300">
                   <input
                     type="checkbox"
@@ -398,6 +489,7 @@ export const AdminAddAnimePage: React.FC = () => {
                   <span>Featured Hero Slider</span>
                 </label>
 
+                {/* Trending */}
                 <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-300">
                   <input
                     type="checkbox"
@@ -405,9 +497,10 @@ export const AdminAddAnimePage: React.FC = () => {
                     onChange={(e) => setIsTrending(e.target.checked)}
                     className="rounded bg-[#181818] border-white/20 text-[#DC143C] focus:ring-0 w-4 h-4 cursor-pointer"
                   />
-                  <span>Trending Now</span>
+                  <span>Trending</span>
                 </label>
 
+                {/* Popular */}
                 <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-neutral-300">
                   <input
                     type="checkbox"
@@ -415,7 +508,7 @@ export const AdminAddAnimePage: React.FC = () => {
                     onChange={(e) => setIsPopular(e.target.checked)}
                     className="rounded bg-[#181818] border-white/20 text-[#DC143C] focus:ring-0 w-4 h-4 cursor-pointer"
                   />
-                  <span>Popular Titles</span>
+                  <span>Popular</span>
                 </label>
               </div>
             </div>
@@ -436,10 +529,13 @@ export const AdminAddAnimePage: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Adding Anime...</span>
+                    <span>Saving Anime...</span>
                   </>
                 ) : (
-                  <span>Add Anime</span>
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Anime</span>
+                  </>
                 )}
               </button>
             </div>

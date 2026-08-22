@@ -65,6 +65,8 @@ export interface Anime {
   type: 'TV' | 'Movie' | 'OVA';
   studio: string;
   duration: string;
+  language?: string;
+  trailerUrl?: string;
   isSubbed: boolean;
   isDubbed: boolean;
   isTrending?: boolean;
