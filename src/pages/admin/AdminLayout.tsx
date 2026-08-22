@@ -6,6 +6,8 @@ import {
   Film,
   PlusCircle,
   ListVideo,
+  Video,
+  Tag,
   Settings,
   LogOut,
   Menu,
@@ -52,6 +54,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     { label: 'Anime Management', path: '/admin/anime', icon: Film },
     { label: 'Add Anime', path: '/admin/anime/add', icon: PlusCircle },
     { label: 'Episodes', path: '/admin/episodes', icon: ListVideo },
+    { label: 'Videos & Streams', path: '/admin/videos', icon: Video },
+    { label: 'Genres & Tags', path: '/admin/genres', icon: Tag },
   ];
 
   return (

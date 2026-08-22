@@ -11,6 +11,8 @@ import { seedInitialAdmin } from './server/controllers/adminController.js';
 import adminRoutes from './server/routes/adminRoutes.js';
 import animeRoutes from './server/routes/animeRoutes.js';
 import episodeRoutes from './server/routes/episodeRoutes.js';
+import videoRoutes from './server/routes/videoRoutes.js';
+import genreRoutes from './server/routes/genreRoutes.js';
 
 async function startServer() {
   const app = express();
@@ -43,6 +45,8 @@ async function startServer() {
   app.use('/api/admin', adminRoutes);
   app.use('/api/anime', animeRoutes);
   app.use('/api/episodes', episodeRoutes);
+  app.use('/api/videos', videoRoutes);
+  app.use('/api/genres', genreRoutes);
 
   app.get('/api/health', (_req, res) => {
     res.status(200).json({

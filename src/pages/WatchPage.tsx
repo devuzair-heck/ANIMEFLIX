@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Play,
@@ -6,15 +6,15 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  Settings,
-  Volume2,
-  Maximize,
   Server,
   MessageSquare,
   Send,
   ListFilter
 } from 'lucide-react';
 import { DEMO_ANIME } from '../utils/animeData';
+import { animeService } from '../services/animeService';
+import { videoService } from '../services/videoService';
+import { Anime, VideoStream } from '../types/anime';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { AnimeImage } from '../components/AnimeImage';
 
@@ -22,7 +22,9 @@ export const WatchPage: React.FC = () => {
   const { animeId, episodeId } = useParams<{ animeId: string; episodeId: string }>();
   const navigate = useNavigate();
 
+  const [anime, setAnime] = useState<Anime | null>(() => DEMO_ANIME.find((a) => a.id === animeId || a.slug === animeId) || null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [videoStreams, setVideoStreams] = useState<VideoStream[]>([]);
   const [activeServer, setActiveServer] = useState('Server 1 (Primary - HD)');
   const [theaterMode, setTheaterMode] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -31,12 +33,55 @@ export const WatchPage: React.FC = () => {
     { id: '2', user: 'OtakuGirl', text: 'The plot twist at the end left me speechless.', time: '5 hours ago' }
   ]);
 
-  const anime = DEMO_ANIME.find((a) => a.id === animeId);
-  const currentEpisodeIndex = anime
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchAnimeData() {
+      if (!animeId) return;
+      try {
+        const found = await animeService.getAnimeById(animeId);
+        if (isMounted && found) {
+          setAnime(found);
+        }
+      } catch {
+        // Handled
+      }
+    }
+    fetchAnimeData();
+    return () => {
+      isMounted = false;
+    };
+  }, [animeId]);
+
+  const currentEpisodeIndex = anime?.episodes
     ? anime.episodes.findIndex((ep) => ep.id === episodeId || ep.number.toString() === episodeId)
     : -1;
 
   const currentEpisode = anime && currentEpisodeIndex !== -1 ? anime.episodes[currentEpisodeIndex] : null;
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStreams() {
+      if (!anime || !currentEpisode) return;
+      try {
+        const streams = await videoService.getAllVideos({
+          animeId: anime.id,
+          episodeId: currentEpisode.id,
+        });
+        if (isMounted) {
+          setVideoStreams(streams);
+          if (streams.length > 0) {
+            setActiveServer(streams[0].serverName);
+          }
+        }
+      } catch {
+        // Handled
+      }
+    }
+    loadStreams();
+    return () => {
+      isMounted = false;
+    };
+  }, [anime?.id, currentEpisode?.id]);
 
   // Error state if invalid anime or episode
   if (!anime || !currentEpisode) {
@@ -61,6 +106,10 @@ export const WatchPage: React.FC = () => {
 
   const prevEpisode = currentEpisodeIndex > 0 ? anime.episodes[currentEpisodeIndex - 1] : null;
   const nextEpisode = currentEpisodeIndex < anime.episodes.length - 1 ? anime.episodes[currentEpisodeIndex + 1] : null;
+
+  const currentStream = videoStreams.find((s) => s.serverName === activeServer) || videoStreams[0];
+  const activeVideoUrl = currentStream?.videoUrl || currentEpisode.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+  const isEmbed = activeVideoUrl.includes('embed') || currentStream?.videoType === 'Embed';
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,81 +141,60 @@ export const WatchPage: React.FC = () => {
           {/* Main Video Stream Player Area (3 Columns on desktop) */}
           <div className="lg:col-span-3 flex flex-col gap-6">
             
-            {/* Professional Video Player Placeholder Container */}
+            {/* Video Player Container */}
             <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-red-950/20 group">
               
-              {/* Background Thumbnail preview */}
-              <AnimeImage
-                src={currentEpisode.thumbnail || anime.banner || anime.poster}
-                alt={currentEpisode.title}
-                type="thumbnail"
-                animeTitle={currentEpisode.title}
-                className="w-full h-full object-cover opacity-70 filter brightness-90"
-              />
+              {isEmbed ? (
+                <iframe
+                  src={activeVideoUrl}
+                  title={currentEpisode.title}
+                  className="w-full h-full border-0"
+                  allowFullScreen
+                />
+              ) : isPlaying ? (
+                <video
+                  src={activeVideoUrl}
+                  controls
+                  autoPlay
+                  className="w-full h-full object-contain bg-black"
+                />
+              ) : (
+                <>
+                  {/* Background Thumbnail preview */}
+                  <AnimeImage
+                    src={currentEpisode.thumbnail || anime.banner || anime.poster}
+                    alt={currentEpisode.title}
+                    type="thumbnail"
+                    animeTitle={currentEpisode.title}
+                    className="w-full h-full object-cover opacity-70 filter brightness-90"
+                  />
 
-              {/* Dark Overlay gradient */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
+                  {/* Dark Overlay gradient */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
 
-              {/* Play / Pause Interactive Center Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <button
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#DC143C]/90 hover:bg-[#DC143C] text-white flex items-center justify-center shadow-2xl shadow-red-900/60 transform hover:scale-110 transition-all border-2 border-white/20"
-                  title={isPlaying ? 'Pause' : 'Play Stream'}
-                >
-                  {isPlaying ? (
-                    <Pause className="w-8 h-8 fill-white" />
-                  ) : (
-                    <Play className="w-8 h-8 fill-white ml-1" />
-                  )}
-                </button>
-              </div>
+                  {/* Play / Pause Interactive Center Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button
+                      onClick={() => setIsPlaying(true)}
+                      className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#DC143C]/90 hover:bg-[#DC143C] text-white flex items-center justify-center shadow-2xl shadow-red-900/60 transform hover:scale-110 transition-all border-2 border-white/20"
+                      title="Play Stream"
+                    >
+                      <Play className="w-8 h-8 fill-white ml-1" />
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Top Bar inside Player */}
-              <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
-                <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-xs font-bold text-white flex items-center gap-2">
+              <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
+                <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-xs font-bold text-white flex items-center gap-2 pointer-events-auto">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span>{activeServer}</span>
                 </div>
 
                 <span className="bg-[#DC143C] text-white font-black text-[10px] px-2.5 py-1 rounded uppercase tracking-wider">
-                  1080p FULL HD
+                  {currentStream?.quality || '1080p FULL HD'}
                 </span>
-              </div>
-
-              {/* Bottom Video Controls Bar */}
-              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black via-black/80 to-transparent p-4 flex flex-col gap-2 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
-                
-                {/* Seekbar Line */}
-                <div className="w-full h-1.5 bg-white/20 hover:h-2.5 rounded-full cursor-pointer relative transition-all">
-                  <div className="w-1/3 h-full bg-[#DC143C] rounded-full relative">
-                    <div className="w-3 h-3 bg-white rounded-full absolute -right-1.5 -top-0.5 shadow" />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setIsPlaying(!isPlaying)} className="hover:text-[#DC143C] transition-colors">
-                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                    </button>
-                    <Volume2 className="w-4 h-4 text-neutral-300 cursor-pointer hover:text-white" />
-                    <span className="text-neutral-400 font-medium">08:24 / {currentEpisode.duration}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-neutral-300">
-                    <button
-                      onClick={() => setTheaterMode(!theaterMode)}
-                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border transition-colors ${
-                        theaterMode ? 'bg-[#DC143C] text-white border-[#DC143C]' : 'bg-black/50 hover:bg-white/10 border-white/10'
-                      }`}
-                    >
-                      Theater Mode
-                    </button>
-                    <Settings className="w-4 h-4 cursor-pointer hover:text-white" />
-                    <Maximize className="w-4 h-4 cursor-pointer hover:text-white" />
-                  </div>
-                </div>
-
               </div>
 
             </div>
@@ -187,7 +215,12 @@ export const WatchPage: React.FC = () => {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => prevEpisode && navigate(`/watch/${anime.id}/${prevEpisode.id}`)}
+                    onClick={() => {
+                      if (prevEpisode) {
+                        setIsPlaying(false);
+                        navigate(`/watch/${anime.id}/${prevEpisode.id}`);
+                      }
+                    }}
                     disabled={!prevEpisode}
                     className="flex items-center gap-1.5 bg-[#080808] hover:bg-white/10 disabled:opacity-40 border border-white/10 text-xs font-bold px-4 py-2.5 rounded-sm uppercase tracking-wider transition-colors"
                   >
@@ -196,7 +229,12 @@ export const WatchPage: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => nextEpisode && navigate(`/watch/${anime.id}/${nextEpisode.id}`)}
+                    onClick={() => {
+                      if (nextEpisode) {
+                        setIsPlaying(false);
+                        navigate(`/watch/${anime.id}/${nextEpisode.id}`);
+                      }
+                    }}
                     disabled={!nextEpisode}
                     className="flex items-center gap-1.5 bg-[#DC143C] hover:bg-[#b01030] disabled:opacity-40 text-white text-xs font-bold px-4 py-2.5 rounded-sm uppercase tracking-wider transition-colors shadow-lg"
                   >
@@ -212,7 +250,10 @@ export const WatchPage: React.FC = () => {
                   <Server className="w-3.5 h-3.5 text-[#DC143C]" />
                   Streaming Server:
                 </span>
-                {['Server 1 (Primary - HD)', 'Server 2 (Backup)', 'Server 3 (Multi-Sub)'].map((srv) => (
+                {(videoStreams.length > 0
+                  ? videoStreams.map((s) => s.serverName)
+                  : ['Server 1 (Primary - HD)', 'Server 2 (Backup)', 'Server 3 (Multi-Sub)']
+                ).map((srv) => (
                   <button
                     key={srv}
                     onClick={() => setActiveServer(srv)}
@@ -274,7 +315,7 @@ export const WatchPage: React.FC = () => {
               <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
                 <span className="font-extrabold text-xs uppercase text-white flex items-center gap-2">
                   <ListFilter className="w-4 h-4 text-[#DC143C]" />
-                  Episode List ({anime.episodes.length})
+                  Episode List ({anime.episodes?.length || 0})
                 </span>
                 <Link
                   to={`/anime/${anime.id}`}
@@ -285,7 +326,7 @@ export const WatchPage: React.FC = () => {
               </div>
 
               <div className="flex flex-col gap-2 max-h-[600px] overflow-y-auto pr-1">
-                {anime.episodes.map((ep) => {
+                {anime.episodes?.map((ep) => {
                   const isActive = ep.id === currentEpisode.id;
                   return (
                     <Link
@@ -299,7 +340,7 @@ export const WatchPage: React.FC = () => {
                     >
                       <div className="relative w-16 aspect-video rounded overflow-hidden bg-black flex-shrink-0">
                         <AnimeImage
-                          src={ep.thumbnail}
+                          src={ep.thumbnail || anime.banner || anime.poster}
                           alt={ep.title}
                           type="thumbnail"
                           animeTitle={ep.title}

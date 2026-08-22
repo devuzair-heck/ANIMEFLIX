@@ -21,6 +21,8 @@ import { AdminAnimeListPage } from '../pages/admin/AdminAnimeListPage';
 import { AdminAddAnimePage } from '../pages/admin/AdminAddAnimePage';
 import { AdminEditAnimePage } from '../pages/admin/AdminEditAnimePage';
 import { AdminEpisodesPage } from '../pages/admin/AdminEpisodesPage';
+import { AdminVideosPage } from '../pages/admin/AdminVideosPage';
+import { AdminGenresPage } from '../pages/admin/AdminGenresPage';
 import { ProtectedRoute } from '../components/admin/ProtectedRoute';
 import { AdminErrorBoundary } from '../components/admin/AdminErrorBoundary';
 
@@ -102,6 +104,22 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <AdminEpisodesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/videos"
+          element={
+            <ProtectedRoute>
+              <AdminVideosPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/genres"
+          element={
+            <ProtectedRoute>
+              <AdminGenresPage />
             </ProtectedRoute>
           }
         />

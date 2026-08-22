@@ -4,8 +4,41 @@ export interface Episode {
   title: string;
   thumbnail: string;
   duration: string;
+  videoUrl?: string;
   airDate?: string;
   description?: string;
+  language?: string;
+  subtitle?: string;
+  isDubbed?: boolean;
+  isPublished?: boolean;
+}
+
+export interface VideoStream {
+  id: string;
+  animeId: string;
+  animeTitle: string;
+  episodeId: string;
+  episodeNumber: number;
+  videoUrl: string;
+  videoType: 'MP4' | 'HLS' | 'Embed';
+  quality: '1080p' | '720p' | '480p' | 'Auto';
+  language: string;
+  subDub: 'SUB' | 'DUB' | 'BOTH';
+  serverName: string;
+  status: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GenreItem {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  color?: string;
+  animeCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Character {
