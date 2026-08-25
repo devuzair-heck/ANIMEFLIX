@@ -322,7 +322,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <td className="py-3 px-4 font-mono">{anime.year}</td>
 
                       {/* Episodes */}
-                      <td className="py-3 px-4 font-mono">{anime.episodes?.length || anime.episodesCount || 12}</td>
+                      <td className="py-3 px-4 font-mono">{anime.episodesCount !== undefined ? anime.episodesCount : (anime.episodes?.length || 12)}</td>
 
                       {/* Rating */}
                       <td className="py-3 px-4">

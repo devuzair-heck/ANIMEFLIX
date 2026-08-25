@@ -323,7 +323,7 @@ export const AdminAnimeListPage: React.FC = () => {
 
                       {/* Episodes */}
                       <td className="py-3.5 px-4 font-mono text-neutral-300">
-                        {anime.episodes?.length || anime.episodesCount || 12}
+                        {anime.episodesCount !== undefined ? anime.episodesCount : (anime.episodes?.length || 12)}
                       </td>
 
                       {/* Featured */}
@@ -352,7 +352,7 @@ export const AdminAnimeListPage: React.FC = () => {
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           <Link
-                            to={`/anime/${anime.id}`}
+                            to={`/anime/${anime.id || (anime as any)._id}`}
                             target="_blank"
                             rel="noreferrer"
                             className="p-2 text-neutral-400 hover:text-white rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
@@ -361,7 +361,7 @@ export const AdminAnimeListPage: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </Link>
                           <Link
-                            to={`/admin/anime/edit/${anime.id}`}
+                            to={`/admin/anime/edit/${(anime as any)._id || anime.id}`}
                             className="p-2 text-neutral-400 hover:text-[#DC143C] rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
                             title="Edit Anime"
                           >

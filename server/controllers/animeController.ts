@@ -103,18 +103,28 @@ export const animeController = {
   async getAnimeById(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
+      return;
+    }
+
     try {
+      const cleanId = id.trim();
       let anime: IAnime | null = null;
       try {
-        anime = await (Anime as any).findOne({
-          $or: [{ id }, { slug: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : undefined }],
-        }).lean();
-      } catch {
-        // In-memory fallback
+        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
+        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
+          queryConditions.push({ _id: cleanId });
+        }
+        anime = await (Anime as any).findOne({ $or: queryConditions }).lean();
+      } catch (dbErr) {
+        console.warn('[Anime getAnimeById] MongoDB query warning:', dbErr);
       }
 
       if (!anime) {
-        anime = inMemoryAnimeList.find((a) => a.id === id || a.slug === id) || null;
+        anime = inMemoryAnimeList.find(
+          (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
+        ) || null;
       }
 
       if (!anime) {
@@ -265,32 +275,51 @@ export const animeController = {
   async updateAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
+      return;
+    }
+
     try {
+      const cleanId = id.trim();
       const updates = { ...req.body };
       delete updates._id;
 
-      // Clean up aliases
+      // Clean up aliases and normalize numeric fields
       if (updates.posterImage) updates.poster = updates.posterImage;
       if (updates.bannerImage) updates.banner = updates.bannerImage;
       if (updates.releaseYear) updates.year = Number(updates.releaseYear);
-      if (updates.totalEpisodes) updates.episodesCount = Number(updates.totalEpisodes);
+      if (updates.totalEpisodes !== undefined) updates.episodesCount = Number(updates.totalEpisodes);
+      if (updates.episodesCount !== undefined) updates.episodesCount = Number(updates.episodesCount);
+      if (updates.rating !== undefined) updates.rating = Number(updates.rating);
+      if (updates.year !== undefined) updates.year = Number(updates.year);
       if (updates.genre && typeof updates.genre === 'string') {
         updates.genres = updates.genre.split(',').map((g: string) => g.trim()).filter(Boolean);
       }
 
       let updatedDoc: any = null;
+
+      // 1. Try finding and updating in MongoDB
       try {
+        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
+        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
+          queryConditions.push({ _id: cleanId });
+        }
+
         updatedDoc = await (Anime as any).findOneAndUpdate(
-          { $or: [{ id }, { slug: id }] },
+          { $or: queryConditions },
           { $set: updates },
-          { new: true }
+          { new: true, runValidators: false }
         ).lean();
-      } catch {
-        // In-memory fallback
+      } catch (dbErr) {
+        console.warn('[Anime Update] MongoDB findOneAndUpdate note:', dbErr);
       }
 
+      // 2. Also update fallback in-memory store if present
       if (!updatedDoc) {
-        const index = inMemoryAnimeList.findIndex((a) => a.id === id || a.slug === id);
+        const index = inMemoryAnimeList.findIndex(
+          (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
+        );
         if (index !== -1) {
           inMemoryAnimeList[index] = {
             ...inMemoryAnimeList[index],
@@ -311,7 +340,8 @@ export const animeController = {
         message: 'Anime updated successfully',
         data: updatedDoc,
       });
-    } catch {
+    } catch (err: any) {
+      console.error('[Anime Update] Internal server error:', err);
       res.status(500).json({ success: false, message: 'Failed to update anime' });
     }
   },

@@ -68,7 +68,7 @@ export const AdminEditAnimePage: React.FC = () => {
           setStatus(data.status || 'Ongoing');
           setType(data.type || 'TV');
           setRating(data.rating || 8.0);
-          setTotalEpisodes(data.episodes?.length || data.episodesCount || 12);
+          setTotalEpisodes(data.episodesCount !== undefined ? data.episodesCount : (data.episodes?.length || 12));
           setDuration(data.duration || '24m');
           setLanguage(data.language || 'Japanese');
           setIsSubbed(data.isSubbed ?? true);
@@ -133,6 +133,7 @@ export const AdminEditAnimePage: React.FC = () => {
         type,
         rating: Number(rating),
         episodesCount: Number(totalEpisodes),
+        totalEpisodes: Number(totalEpisodes),
         studio: studio.trim() || 'Unknown Studio',
         duration: duration.trim() || '24m',
         language: language.trim() || 'Japanese',
@@ -145,7 +146,8 @@ export const AdminEditAnimePage: React.FC = () => {
         isTopRated: Number(rating) >= 8.5,
       };
 
-      const res = await animeService.updateAnime(originalAnime.id, updates);
+      const targetId = originalAnime._id || originalAnime.id || id;
+      const res = await animeService.updateAnime(targetId, updates);
       if (res.success) {
         navigate('/admin/anime', { replace: true });
       } else {

@@ -58,6 +58,7 @@ export interface Character {
 }
 
 export interface Anime {
+  _id?: string;
   id: string;
   slug: string;
   title: string;
