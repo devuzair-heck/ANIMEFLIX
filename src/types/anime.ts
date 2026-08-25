@@ -1,16 +1,24 @@
 export interface Episode {
+  _id?: string;
   id: string;
+  animeId?: string;
+  animeTitle?: string;
+  seasonNumber?: number;
+  episodeNumber?: number;
   number: number;
   title: string;
   thumbnail: string;
   duration: string;
   videoUrl?: string;
+  releaseDate?: string;
   airDate?: string;
   description?: string;
   language?: string;
   subtitle?: string;
   isDubbed?: boolean;
   isPublished?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface VideoStream {

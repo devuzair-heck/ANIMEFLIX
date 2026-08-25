@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Anime, IAnime, IEpisode } from '../models/Anime.js';
+import { Episode } from '../models/Episode.js';
 import { INITIAL_ANIME_SEED } from '../data/defaultCatalog.js';
 
 // In-memory fallback anime store for resilient operation when MongoDB is offline
@@ -342,9 +343,11 @@ export const animeController = {
         const existingDoc = await (Anime as any).findOne({ $or: queryConditions });
         if (existingDoc) {
           await (Anime as any).deleteOne({ _id: existingDoc._id });
+          await (Episode as any).deleteMany({ $or: [{ animeId: cleanId }, { animeId: existingDoc.id }] }).catch(() => {});
           deleted = true;
         } else {
           const resDb = await (Anime as any).deleteOne({ $or: queryConditions });
+          await (Episode as any).deleteMany({ animeId: cleanId }).catch(() => {});
           if (resDb.deletedCount > 0) {
             deleted = true;
           }
