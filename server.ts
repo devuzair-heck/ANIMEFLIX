@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 
 import { connectDB } from './server/config/db.js';
 import { seedInitialAdmin } from './server/controllers/adminController.js';
+import { seedInitialAnimeCatalog } from './server/controllers/animeController.js';
 import adminRoutes from './server/routes/adminRoutes.js';
 import animeRoutes from './server/routes/animeRoutes.js';
 import episodeRoutes from './server/routes/episodeRoutes.js';
@@ -37,9 +38,14 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cookieParser());
 
-  // Connect Database & Bootstrap Initial Admin non-blockingly
-  connectDB().catch(() => {});
-  seedInitialAdmin().catch(() => {});
+  // Connect Database & Bootstrap Initial Admin and Catalog
+  try {
+    await connectDB();
+    await seedInitialAdmin();
+    await seedInitialAnimeCatalog();
+  } catch (initErr) {
+    console.error('[Server] Initialization notice:', initErr);
+  }
 
   // API Routes FIRST
   app.use('/api/admin', adminRoutes);

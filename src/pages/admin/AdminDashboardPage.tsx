@@ -101,8 +101,9 @@ export const AdminDashboardPage: React.FC = () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await animeService.deleteAnime(deleteTarget.id);
-      setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      const targetId = (deleteTarget as any)._id || deleteTarget.id;
+      await animeService.deleteAnime(targetId);
+      setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id && (a as any)._id !== (deleteTarget as any)._id));
       setDeleteTarget(null);
       // Refresh stats after deletion
       await refreshStats();
@@ -358,7 +359,7 @@ export const AdminDashboardPage: React.FC = () => {
                             <Eye className="w-3.5 h-3.5" />
                           </Link>
                           <Link
-                            to={`/admin/anime/edit/${anime.id}`}
+                            to={`/admin/anime/edit/${(anime as any)._id || anime.id}`}
                             className="p-1.5 text-neutral-400 hover:text-[#DC143C] rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
                             title="Edit Anime"
                           >

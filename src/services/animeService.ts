@@ -22,14 +22,14 @@ export const animeService = {
     sortBy?: string;
   }): Promise<Anime[]> {
     try {
-      const response = await apiClient.get<{ success: boolean; data: Anime[] }>('/api/anime', { params });
-      if (response.data && response.data.success && Array.isArray(response.data.data)) {
-        // Even if empty array (e.g. all deleted or filter returned 0), use backend response!
-        syncLocalCatalog(response.data.data);
-        return response.data.data;
+      const response = await apiClient.get<{ success: boolean; data?: Anime[]; anime?: Anime[] }>('/api/anime', { params });
+      const list = response.data?.data || response.data?.anime;
+      if (response.data && response.data.success && Array.isArray(list)) {
+        syncLocalCatalog(list);
+        return list;
       }
-    } catch {
-      // Fallback only if server completely unreachable
+    } catch (err) {
+      console.warn('[animeService.getAllAnime] Error fetching anime from server:', err);
     }
     return DEMO_ANIME;
   },
@@ -39,94 +39,60 @@ export const animeService = {
    */
   async getAnimeById(id: string): Promise<Anime | null> {
     try {
-      const response = await apiClient.get<{ success: boolean; data: Anime }>(`/api/anime/${id}`);
-      if (response.data && response.data.success && response.data.data) {
-        return response.data.data;
+      const response = await apiClient.get<{ success: boolean; data?: Anime; anime?: Anime }>(`/api/anime/${id}`);
+      const item = response.data?.data || response.data?.anime;
+      if (response.data && response.data.success && item) {
+        return item;
       }
-    } catch {
-      // Fallback to local
+    } catch (err) {
+      console.warn('[animeService.getAnimeById] Error fetching anime from server:', err);
     }
-    return DEMO_ANIME.find((a) => a.id === id || a.slug === id) || null;
+    return DEMO_ANIME.find((a) => a.id === id || a.slug === id || (a as any)._id === id) || null;
   },
 
   /**
    * Admin: Add new anime
    */
-  async createAnime(animeData: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; message?: string }> {
+  async createAnime(animeData: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
     try {
-      const response = await apiClient.post<{ success: boolean; data: Anime; message: string }>('/api/anime', animeData);
-      if (response.data && response.data.success && response.data.data) {
-        const created = response.data.data;
-        const exists = DEMO_ANIME.some((a) => a.id === created.id);
+      const response = await apiClient.post<{ success: boolean; data?: Anime; anime?: Anime; message: string }>('/api/anime', animeData);
+      if (response.data && response.data.success && (response.data.data || response.data.anime)) {
+        const created = (response.data.data || response.data.anime)!;
+        const exists = DEMO_ANIME.some((a) => a.id === created.id || ((a as any)._id && (a as any)._id === (created as any)._id));
         if (!exists) {
           DEMO_ANIME.unshift(created);
         }
-        return { success: true, data: created, message: response.data.message };
+        return { success: true, data: created, anime: created, message: response.data.message || 'Anime added successfully.' };
       }
       return { success: false, message: response.data?.message || 'Failed to create anime.' };
     } catch (err: any) {
-      // If error response from server (e.g. 400, 401, 500)
       if (err.response?.data?.message) {
         return { success: false, message: err.response.data.message };
       }
-      // Offline local creation fallback
-      const generatedId = animeData.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `anime-${Date.now()}`;
-      const newAnime: Anime = {
-        id: animeData.id || generatedId,
-        slug: generatedId,
-        title: animeData.title || 'Untitled Anime',
-        japaneseTitle: animeData.japaneseTitle || '',
-        description: animeData.description || '',
-        poster: animeData.poster || animeData.posterImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-        banner: animeData.banner || animeData.bannerImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80',
-        rating: Number(animeData.rating) || 8.0,
-        year: Number(animeData.year || animeData.releaseYear) || new Date().getFullYear(),
-        genres: Array.isArray(animeData.genres) ? animeData.genres : ['Action', 'Fantasy'],
-        episodesCount: Number(animeData.episodesCount || animeData.totalEpisodes) || 12,
-        status: (animeData.status as any) || 'Ongoing',
-        type: (animeData.type as any) || 'TV',
-        studio: animeData.studio || 'Unknown Studio',
-        duration: animeData.duration || '24m',
-        isSubbed: true,
-        isDubbed: Boolean(animeData.isDubbed),
-        isTrending: Boolean(animeData.isTrending || animeData.trending),
-        isPopular: Boolean(animeData.isPopular || animeData.popular),
-        isTopRated: (Number(animeData.rating) || 8.0) >= 8.5,
-        isRecentlyAdded: true,
-        featuredInHero: Boolean(animeData.featuredInHero || animeData.isFeatured || animeData.featured),
-        episodes: Array.isArray(animeData.episodes) ? animeData.episodes : [],
-      };
-      DEMO_ANIME.unshift(newAnime);
-      return { success: true, data: newAnime, message: 'Anime created successfully.' };
+      return { success: false, message: 'Server error: Failed to add anime to database.' };
     }
   },
 
   /**
    * Admin: Update anime
    */
-  async updateAnime(id: string, updates: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; message?: string }> {
+  async updateAnime(id: string, updates: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
     try {
-      const response = await apiClient.put<{ success: boolean; data: Anime; message: string }>(`/api/anime/${id}`, updates);
-      if (response.data && response.data.success && response.data.data) {
-        const updated = response.data.data;
-        const index = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
+      const response = await apiClient.put<{ success: boolean; data?: Anime; anime?: Anime; message: string }>(`/api/anime/${id}`, updates);
+      if (response.data && response.data.success && (response.data.data || response.data.anime)) {
+        const updated = (response.data.data || response.data.anime)!;
+        const index = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id || (a as any)._id === id);
         if (index !== -1) {
           DEMO_ANIME[index] = { ...DEMO_ANIME[index], ...updated };
         }
-        return { success: true, data: updated, message: response.data.message };
+        return { success: true, data: updated, anime: updated, message: response.data.message || 'Anime updated successfully.' };
       }
       return { success: false, message: response.data?.message || 'Failed to update anime.' };
     } catch (err: any) {
       if (err.response?.data?.message) {
         return { success: false, message: err.response.data.message };
       }
-      // Local fallback
-      const index = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
-      if (index !== -1) {
-        DEMO_ANIME[index] = { ...DEMO_ANIME[index], ...updates };
-        return { success: true, data: DEMO_ANIME[index], message: 'Anime updated successfully.' };
-      }
-      return { success: false, message: 'Anime not found.' };
+      return { success: false, message: 'Server error: Failed to update anime.' };
     }
   },
 
@@ -137,25 +103,14 @@ export const animeService = {
     try {
       const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/anime/${id}`);
       if (response.data && response.data.success) {
-        const idx = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
+        const idx = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id || (a as any)._id === id);
         if (idx !== -1) DEMO_ANIME.splice(idx, 1);
         return { success: true, message: response.data.message || 'Anime deleted successfully.' };
       }
       return { success: false, message: response.data?.message || 'Unable to delete anime.' };
     } catch (err: any) {
       const errMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Unable to delete anime.';
-      // If unauthorized, forbidden, or server error returned by API, do NOT silently pretend success!
-      if (err.response) {
-        return { success: false, message: errMsg };
-      }
-
-      // If server is totally unreachable (e.g. client offline mode)
-      const idx = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id);
-      if (idx !== -1) {
-        DEMO_ANIME.splice(idx, 1);
-        return { success: true, message: 'Anime deleted successfully.' };
-      }
-      return { success: false, message: 'Anime not found.' };
+      return { success: false, message: errMsg };
     }
   },
 

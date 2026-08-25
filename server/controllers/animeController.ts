@@ -9,17 +9,22 @@ export const inMemoryAnimeList: IAnime[] = [...(INITIAL_ANIME_SEED as unknown as
 /**
  * Helper to seed initial anime catalog if database is empty
  */
-export async function seedInitialAnimeCatalog(demoAnimeList: any[]): Promise<void> {
+export async function seedInitialAnimeCatalog(demoAnimeList?: any[]): Promise<void> {
   try {
+    const seedList = demoAnimeList && demoAnimeList.length > 0 ? demoAnimeList : INITIAL_ANIME_SEED;
     const count = await (Anime as any).countDocuments();
-    if (count === 0 && demoAnimeList && demoAnimeList.length > 0) {
-      await Anime.insertMany(demoAnimeList);
-      console.log(`[Anime Seed] ${demoAnimeList.length} anime seeded into MongoDB.`);
+    if (count === 0 && seedList && seedList.length > 0) {
+      await Anime.insertMany(seedList);
+      console.log(`[Anime Seed] ${seedList.length} anime seeded into MongoDB.`);
+    } else {
+      console.log(`[Anime DB] MongoDB contains ${count} anime documents.`);
     }
-  } catch {
+  } catch (err) {
+    console.warn('[Anime Seed] MongoDB check notice:', err);
     // In-memory fallback
-    if (inMemoryAnimeList.length === 0 && demoAnimeList) {
-      demoAnimeList.forEach((item) => {
+    if (inMemoryAnimeList.length === 0) {
+      const fallbackList = demoAnimeList && demoAnimeList.length > 0 ? demoAnimeList : INITIAL_ANIME_SEED;
+      fallbackList.forEach((item) => {
         inMemoryAnimeList.push({
           ...item,
           createdAt: new Date(),

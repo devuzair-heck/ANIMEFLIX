@@ -60,9 +60,10 @@ export const AdminAnimeListPage: React.FC = () => {
     setIsDeleting(true);
     setActionError(null);
     try {
-      const res = await animeService.deleteAnime(deleteTarget.id);
+      const targetId = (deleteTarget as any)._id || deleteTarget.id;
+      const res = await animeService.deleteAnime(targetId);
       if (res.success) {
-        setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+        setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id && (a as any)._id !== (deleteTarget as any)._id));
         setActionMessage(res.message || 'Anime deleted successfully.');
         setTimeout(() => setActionMessage(null), 4000);
       } else {
