@@ -92,28 +92,38 @@ export const AdminAnimeListPage: React.FC = () => {
 
   // Extract available years for filter
   const availableYears = useMemo(() => {
-    const years = Array.from(new Set(animeList.map((a) => a.year).filter(Boolean))).sort((a, b) => b - a);
+    const years = Array.from(new Set(animeList.map((a) => a.year).filter(Boolean))).sort((a: any, b: any) => b - a);
     return years;
   }, [animeList]);
 
-  // Filtered anime list
+  // Filtered anime list (100% guarded against null/undefined fields)
   const filteredAnime = useMemo(() => {
     return animeList.filter((anime) => {
+      if (!anime) return false;
       const s = searchQuery.toLowerCase().trim();
+      const title = (anime.title || '').toLowerCase();
+      const jpTitle = (anime.japaneseTitle || '').toLowerCase();
+      const studio = (anime.studio || '').toLowerCase();
+
       const matchesSearch =
         !s ||
-        anime.title.toLowerCase().includes(s) ||
-        (anime.japaneseTitle && anime.japaneseTitle.toLowerCase().includes(s)) ||
-        (anime.studio && anime.studio.toLowerCase().includes(s));
+        title.includes(s) ||
+        jpTitle.includes(s) ||
+        studio.includes(s);
 
+      const genres = Array.isArray(anime.genres) ? anime.genres : [];
       const matchesGenre =
-        selectedGenre === 'All' || anime.genres.some((g) => g.toLowerCase() === selectedGenre.toLowerCase());
+        selectedGenre === 'All' ||
+        genres.some((g) => typeof g === 'string' && g.toLowerCase() === selectedGenre.toLowerCase());
 
+      const status = (anime.status || '').toLowerCase();
       const matchesStatus =
-        selectedStatus === 'All' || anime.status.toLowerCase() === selectedStatus.toLowerCase();
+        selectedStatus === 'All' ||
+        status === selectedStatus.toLowerCase();
 
+      const animeYear = anime.year !== undefined && anime.year !== null ? anime.year.toString() : '';
       const matchesYear =
-        selectedYear === 'All' || anime.year.toString() === selectedYear;
+        selectedYear === 'All' || animeYear === selectedYear;
 
       return matchesSearch && matchesGenre && matchesStatus && matchesYear;
     });
@@ -314,12 +324,12 @@ export const AdminAnimeListPage: React.FC = () => {
                       {/* Genres */}
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap gap-1 max-w-[180px]">
-                          {anime.genres.slice(0, 2).map((g) => (
+                          {(Array.isArray(anime.genres) ? anime.genres : []).slice(0, 2).map((g) => (
                             <span key={g} className="px-2 py-0.5 rounded bg-white/5 text-neutral-300 text-[10px] font-medium border border-white/5">
                               {g}
                             </span>
                           ))}
-                          {anime.genres.length > 2 && (
+                          {Array.isArray(anime.genres) && anime.genres.length > 2 && (
                             <span className="text-[10px] text-neutral-500">+{anime.genres.length - 2}</span>
                           )}
                         </div>

@@ -22,9 +22,17 @@ export const animeService = {
     sortBy?: string;
   }): Promise<Anime[]> {
     try {
-      const response = await apiClient.get<{ success: boolean; data?: Anime[]; anime?: Anime[] }>('/api/anime', { params });
-      const list = response.data?.data || response.data?.anime;
-      if (response.data && response.data.success && Array.isArray(list)) {
+      const response = await apiClient.get<any>('/api/anime', { params });
+      const raw = response?.data;
+      let list: Anime[] | null = null;
+      if (Array.isArray(raw)) {
+        list = raw;
+      } else if (raw && typeof raw === 'object') {
+        if (Array.isArray(raw.data)) list = raw.data;
+        else if (Array.isArray(raw.anime)) list = raw.anime;
+        else if (Array.isArray(raw.results)) list = raw.results;
+      }
+      if (list && Array.isArray(list)) {
         syncLocalCatalog(list);
         return list;
       }
@@ -39,9 +47,15 @@ export const animeService = {
    */
   async getAnimeById(id: string): Promise<Anime | null> {
     try {
-      const response = await apiClient.get<{ success: boolean; data?: Anime; anime?: Anime }>(`/api/anime/${id}`);
-      const item = response.data?.data || response.data?.anime;
-      if (response.data && response.data.success && item) {
+      const response = await apiClient.get<any>(`/api/anime/${id}`);
+      const raw = response?.data;
+      let item: Anime | null = null;
+      if (raw && typeof raw === 'object') {
+        if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) item = raw.data;
+        else if (raw.anime && typeof raw.anime === 'object' && !Array.isArray(raw.anime)) item = raw.anime;
+        else if (raw.id || raw._id || raw.title) item = raw;
+      }
+      if (item) {
         return item;
       }
     } catch (err) {
@@ -55,16 +69,22 @@ export const animeService = {
    */
   async createAnime(animeData: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
     try {
-      const response = await apiClient.post<{ success: boolean; data?: Anime; anime?: Anime; message: string }>('/api/anime', animeData);
-      if (response.data && response.data.success && (response.data.data || response.data.anime)) {
-        const created = (response.data.data || response.data.anime)!;
-        const exists = DEMO_ANIME.some((a) => a.id === created.id || ((a as any)._id && (a as any)._id === (created as any)._id));
+      const response = await apiClient.post<any>('/api/anime', animeData);
+      const raw = response?.data;
+      let created: Anime | null = null;
+      if (raw && typeof raw === 'object') {
+        if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) created = raw.data;
+        else if (raw.anime && typeof raw.anime === 'object' && !Array.isArray(raw.anime)) created = raw.anime;
+        else if (raw.id || raw._id || raw.title) created = raw;
+      }
+      if (created) {
+        const exists = DEMO_ANIME.some((a) => a.id === created!.id || ((a as any)._id && (a as any)._id === (created as any)._id));
         if (!exists) {
           DEMO_ANIME.unshift(created);
         }
-        return { success: true, data: created, anime: created, message: response.data.message || 'Anime added successfully.' };
+        return { success: true, data: created, anime: created, message: raw?.message || 'Anime created successfully.' };
       }
-      return { success: false, message: response.data?.message || 'Failed to create anime.' };
+      return { success: false, message: raw?.message || 'Failed to create anime.' };
     } catch (err: any) {
       if (err.response?.data?.message) {
         return { success: false, message: err.response.data.message };
