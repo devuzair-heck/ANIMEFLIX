@@ -53,6 +53,7 @@ export const AdminAddAnimePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
 
     // Field validations
     if (!title.trim()) {
@@ -107,13 +108,16 @@ export const AdminAddAnimePage: React.FC = () => {
 
       const res = await animeService.createAnime(payload);
       if (res.success) {
-        navigate('/admin/anime', { replace: true });
+        navigate('/admin/anime', {
+          replace: true,
+          state: { successMessage: 'Anime created successfully.' },
+        });
       } else {
         setErrorMessage(res.message || 'Failed to add anime.');
+        setIsSubmitting(false);
       }
     } catch {
       setErrorMessage('Failed to connect to the server while adding anime.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -529,7 +533,7 @@ export const AdminAddAnimePage: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving Anime...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>

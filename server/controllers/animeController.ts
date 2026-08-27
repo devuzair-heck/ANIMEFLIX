@@ -183,12 +183,26 @@ export const animeController = {
         return;
       }
 
-      const generatedSlug = title
+      const baseSlug = title
         .toLowerCase()
+        .trim()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '') || `anime-${Date.now()}`;
 
-      const finalId = req.body.id || generatedSlug;
+      let generatedSlug = baseSlug;
+      let finalId = req.body.id || baseSlug;
+
+      // Ensure slug and id uniqueness in database
+      try {
+        const existingDoc = await (Anime as any).findOne({ $or: [{ id: finalId }, { slug: generatedSlug }] });
+        if (existingDoc) {
+          const suffix = Math.random().toString(36).substring(2, 7);
+          generatedSlug = `${baseSlug}-${suffix}`;
+          finalId = req.body.id ? `${req.body.id}-${suffix}` : generatedSlug;
+        }
+      } catch {
+        // Handled
+      }
 
       // Normalize genres array
       let finalGenres: string[] = [];
@@ -251,8 +265,10 @@ export const animeController = {
 
       let createdAnime: any = null;
       try {
-        createdAnime = await Anime.create(newAnimeData);
-      } catch {
+        const createdDoc = await Anime.create(newAnimeData);
+        createdAnime = createdDoc.toObject ? createdDoc.toObject() : createdDoc;
+      } catch (dbErr) {
+        console.warn('[createAnime] MongoDB insert notice:', dbErr);
         // In-memory fallback
         createdAnime = {
           ...newAnimeData,
@@ -263,10 +279,15 @@ export const animeController = {
         inMemoryAnimeList.unshift(createdAnime);
       }
 
+      if (createdAnime && createdAnime._id) {
+        createdAnime._id = String(createdAnime._id);
+      }
+
       res.status(201).json({
         success: true,
         message: 'Anime added successfully',
         data: createdAnime,
+        anime: createdAnime,
       });
     } catch {
       res.status(500).json({ success: false, message: 'Failed to create anime entry' });

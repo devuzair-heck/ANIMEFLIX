@@ -98,6 +98,7 @@ export const AdminEditAnimePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!id || !originalAnime) return;
 
     if (!title.trim()) {
@@ -149,13 +150,16 @@ export const AdminEditAnimePage: React.FC = () => {
       const targetId = originalAnime._id || originalAnime.id || id;
       const res = await animeService.updateAnime(targetId, updates);
       if (res.success) {
-        navigate('/admin/anime', { replace: true });
+        navigate('/admin/anime', {
+          replace: true,
+          state: { successMessage: 'Anime updated successfully.' },
+        });
       } else {
         setErrorMessage(res.message || 'Failed to update anime.');
+        setIsSubmitting(false);
       }
     } catch {
       setErrorMessage('Server error while saving anime modifications.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -566,7 +570,7 @@ export const AdminEditAnimePage: React.FC = () => {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving Changes...</span>
+                    <span>Saving...</span>
                   </>
                 ) : (
                   <>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Film,
   PlusCircle,
@@ -23,6 +23,7 @@ import { Anime } from '../../types/anime';
 import { GENRES_LIST } from '../../utils/animeData';
 
 export const AdminAnimeListPage: React.FC = () => {
+  const location = useLocation();
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('All');
@@ -32,6 +33,16 @@ export const AdminAnimeListPage: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Anime | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  // Check for navigation flash messages
+  useEffect(() => {
+    const flash = (location.state as any)?.message || (location.state as any)?.successMessage;
+    if (flash) {
+      setActionMessage(flash);
+      const t = setTimeout(() => setActionMessage(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [location.state]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

@@ -1,43 +1,76 @@
 import mongoose from 'mongoose';
+import path from 'path';
+import fs from 'fs';
 
 let mongoMemoryServer: any = null;
+let isConnecting = false;
 
 export async function connectDB(): Promise<void> {
+  // If already connected, reuse existing connection immediately
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  // If already in the process of connecting, await readyState
+  if (isConnecting || mongoose.connection.readyState === 2) {
+    let attempts = 0;
+    while (mongoose.connection.readyState !== 1 && attempts < 20) {
+      await new Promise((r) => setTimeout(r, 100));
+      attempts++;
+    }
+    if (mongoose.connection.readyState === 1) return;
+  }
+
+  isConnecting = true;
   mongoose.set('strictQuery', true);
   const mongoUri = process.env.MONGO_URI;
 
-  // 1. If explicit external MONGO_URI is set (e.g. MongoDB Atlas), try connecting to it
+  // 1. If explicit external MONGO_URI is set (e.g. MongoDB Atlas), connect directly
   if (mongoUri && !mongoUri.includes('127.0.0.1') && !mongoUri.includes('localhost')) {
     try {
       await mongoose.connect(mongoUri, {
-        serverSelectionTimeoutMS: 4000,
+        serverSelectionTimeoutMS: 3000,
       });
       console.log('[Database] MongoDB connected successfully to external URI.');
+      isConnecting = false;
       return;
     } catch (err) {
       console.warn('[Database] External MONGO_URI connection attempt failed, falling back to embedded MongoDB server:', err);
     }
   }
 
-  // 2. Try connecting to local MongoDB daemon (if running on machine/port 27017)
-  try {
-    const localUri = mongoUri || 'mongodb://127.0.0.1:27017/animeflix';
-    await mongoose.connect(localUri, {
-      serverSelectionTimeoutMS: 1200,
-    });
-    console.log('[Database] Connected to local MongoDB daemon successfully.');
-    return;
-  } catch {
-    // Local standalone daemon is not running, proceed to embedded MongoMemoryServer
+  // 2. Try fast connection to local MongoDB daemon (if running)
+  if (mongoUri && (mongoUri.includes('127.0.0.1') || mongoUri.includes('localhost'))) {
+    try {
+      await mongoose.connect(mongoUri, {
+        serverSelectionTimeoutMS: 800,
+      });
+      console.log('[Database] Connected to local MongoDB daemon successfully.');
+      isConnecting = false;
+      return;
+    } catch {
+      // Local daemon unavailable, fallback to MongoMemoryServer
+    }
   }
 
-  // 3. Boot Embedded MongoDB Server instance
+  // 3. Boot Embedded MongoDB Server instance with persistent directory
   try {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     if (!mongoMemoryServer) {
+      const dbDir = path.join(process.cwd(), '.mongodb_data');
+      if (!fs.existsSync(dbDir)) {
+        try {
+          fs.mkdirSync(dbDir, { recursive: true });
+        } catch {
+          // Handled
+        }
+      }
+
       mongoMemoryServer = await MongoMemoryServer.create({
         instance: {
           dbName: 'animeflix',
+          storageEngine: 'wiredTiger',
+          dbPath: fs.existsSync(dbDir) ? dbDir : undefined,
         },
       });
     }
@@ -49,6 +82,9 @@ export async function connectDB(): Promise<void> {
     console.log(`[Database] MongoDB Server active and connected at ${embeddedUri} (db: animeflix)`);
   } catch (err) {
     console.error('[Database] Critical: Could not start or connect to MongoDB server:', err);
+  } finally {
+    isConnecting = false;
   }
 }
+
 
