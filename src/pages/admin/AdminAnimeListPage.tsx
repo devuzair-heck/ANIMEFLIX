@@ -270,7 +270,7 @@ export const AdminAnimeListPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-white/5 text-neutral-300">
                   {paginatedAnime.map((anime) => (
-                    <tr key={anime.id} className="hover:bg-white/[0.02] transition-colors">
+                    <tr key={anime.id || (anime as any)._id || anime.title} className="hover:bg-white/[0.02] transition-colors">
                       
                       {/* Poster */}
                       <td className="py-3.5 px-4">

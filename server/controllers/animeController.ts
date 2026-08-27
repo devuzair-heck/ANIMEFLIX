@@ -296,7 +296,7 @@ export const animeController = {
 
   /**
    * PUT /api/anime/:id
-   * Admin: Update anime without duplicating records
+   * Admin: Update anime without duplicating or deleting records
    */
   async updateAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
@@ -309,12 +309,16 @@ export const animeController = {
     try {
       const cleanId = id.trim();
       const updates = { ...req.body };
+      // Critical: Never allow _id, __v, or unique ID/slug fields to be corrupted during update
       delete updates._id;
+      delete updates.__v;
+      delete updates.id;
+      delete updates.slug;
 
       // Clean up aliases and normalize numeric fields
       if (updates.posterImage) updates.poster = updates.posterImage;
       if (updates.bannerImage) updates.banner = updates.bannerImage;
-      if (updates.releaseYear) updates.year = Number(updates.releaseYear);
+      if (updates.releaseYear !== undefined) updates.year = Number(updates.releaseYear);
       if (updates.totalEpisodes !== undefined) updates.episodesCount = Number(updates.totalEpisodes);
       if (updates.episodesCount !== undefined) updates.episodesCount = Number(updates.episodesCount);
       if (updates.rating !== undefined) updates.rating = Number(updates.rating);
@@ -342,17 +346,17 @@ export const animeController = {
       }
 
       // 2. Also update fallback in-memory store if present
-      if (!updatedDoc) {
-        const index = inMemoryAnimeList.findIndex(
-          (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
-        );
-        if (index !== -1) {
-          inMemoryAnimeList[index] = {
-            ...inMemoryAnimeList[index],
-            ...updates,
-            updatedAt: new Date(),
-          };
-          updatedDoc = inMemoryAnimeList[index];
+      const memIndex = inMemoryAnimeList.findIndex(
+        (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
+      );
+      if (memIndex !== -1) {
+        inMemoryAnimeList[memIndex] = {
+          ...inMemoryAnimeList[memIndex],
+          ...updates,
+          updatedAt: new Date(),
+        };
+        if (!updatedDoc) {
+          updatedDoc = inMemoryAnimeList[memIndex];
         }
       }
 
@@ -361,10 +365,15 @@ export const animeController = {
         return;
       }
 
+      if (updatedDoc && updatedDoc._id) {
+        updatedDoc._id = String(updatedDoc._id);
+      }
+
       res.status(200).json({
         success: true,
         message: 'Anime updated successfully',
         data: updatedDoc,
+        anime: updatedDoc,
       });
     } catch (err: any) {
       console.error('[Anime Update] Internal server error:', err);

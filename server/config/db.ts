@@ -7,18 +7,18 @@ let isConnecting = false;
 
 export async function connectDB(): Promise<void> {
   // If already connected, reuse existing connection immediately
-  if (mongoose.connection.readyState === 1) {
+  if ((mongoose.connection.readyState as number) === 1) {
     return;
   }
 
   // If already in the process of connecting, await readyState
-  if (isConnecting || mongoose.connection.readyState === 2) {
+  if (isConnecting || (mongoose.connection.readyState as number) === 2) {
     let attempts = 0;
-    while (mongoose.connection.readyState !== 1 && attempts < 20) {
+    while ((mongoose.connection.readyState as number) !== 1 && attempts < 20) {
       await new Promise((r) => setTimeout(r, 100));
       attempts++;
     }
-    if (mongoose.connection.readyState === 1) return;
+    if ((mongoose.connection.readyState as number) === 1) return;
   }
 
   isConnecting = true;
@@ -53,24 +53,13 @@ export async function connectDB(): Promise<void> {
     }
   }
 
-  // 3. Boot Embedded MongoDB Server instance with persistent directory
+  // 3. Boot Embedded MongoDB Server instance
   try {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
     if (!mongoMemoryServer) {
-      const dbDir = path.join(process.cwd(), '.mongodb_data');
-      if (!fs.existsSync(dbDir)) {
-        try {
-          fs.mkdirSync(dbDir, { recursive: true });
-        } catch {
-          // Handled
-        }
-      }
-
       mongoMemoryServer = await MongoMemoryServer.create({
         instance: {
           dbName: 'animeflix',
-          storageEngine: 'wiredTiger',
-          dbPath: fs.existsSync(dbDir) ? dbDir : undefined,
         },
       });
     }
