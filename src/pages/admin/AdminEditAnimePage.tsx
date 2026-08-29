@@ -147,7 +147,8 @@ export const AdminEditAnimePage: React.FC = () => {
         isTopRated: Number(rating) >= 8.5,
       };
 
-      const targetId = originalAnime._id || originalAnime.id || id;
+      const targetId = (originalAnime as any)?._id ? String((originalAnime as any)._id) : (originalAnime?.id || id);
+      console.log(`[Admin Edit] Updating anime with ID: ${targetId}`);
       const res = await animeService.updateAnime(targetId, updates);
       if (res.success) {
         navigate('/admin/anime', {

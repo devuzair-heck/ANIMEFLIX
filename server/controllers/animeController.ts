@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Anime, IAnime, IEpisode } from '../models/Anime.js';
 import { Episode } from '../models/Episode.js';
 import { INITIAL_ANIME_SEED } from '../data/defaultCatalog.js';
@@ -108,20 +109,21 @@ export const animeController = {
   async getAnimeById(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim()) {
+    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
 
     try {
       const cleanId = id.trim();
-      let anime: IAnime | null = null;
+      let anime: any = null;
       try {
-        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
-        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
-          queryConditions.push({ _id: cleanId });
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          anime = await (Anime as any).findById(cleanId).lean();
         }
-        anime = await (Anime as any).findOne({ $or: queryConditions }).lean();
+        if (!anime) {
+          anime = await (Anime as any).findOne({ $or: [{ id: cleanId }, { slug: cleanId }] }).lean();
+        }
       } catch (dbErr) {
         console.warn('[Anime getAnimeById] MongoDB query warning:', dbErr);
       }
@@ -137,7 +139,11 @@ export const animeController = {
         return;
       }
 
-      res.status(200).json({ success: true, data: anime });
+      if (anime && anime._id) {
+        anime._id = String(anime._id);
+      }
+
+      res.status(200).json({ success: true, data: anime, anime });
     } catch {
       res.status(500).json({ success: false, message: 'Error retrieving anime' });
     }
@@ -301,7 +307,7 @@ export const animeController = {
   async updateAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim()) {
+    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
@@ -323,7 +329,9 @@ export const animeController = {
       if (updates.episodesCount !== undefined) updates.episodesCount = Number(updates.episodesCount);
       if (updates.rating !== undefined) updates.rating = Number(updates.rating);
       if (updates.year !== undefined) updates.year = Number(updates.year);
-      if (updates.genre && typeof updates.genre === 'string') {
+      if (updates.genres && Array.isArray(updates.genres)) {
+        updates.genres = updates.genres.map((g: any) => String(g).trim()).filter(Boolean);
+      } else if (updates.genre && typeof updates.genre === 'string') {
         updates.genres = updates.genre.split(',').map((g: string) => g.trim()).filter(Boolean);
       }
 
@@ -331,16 +339,20 @@ export const animeController = {
 
       // 1. Try finding and updating in MongoDB
       try {
-        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
-        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
-          queryConditions.push({ _id: cleanId });
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          updatedDoc = await (Anime as any).findByIdAndUpdate(
+            cleanId,
+            { $set: updates },
+            { new: true, runValidators: false }
+          ).lean();
         }
-
-        updatedDoc = await (Anime as any).findOneAndUpdate(
-          { $or: queryConditions },
-          { $set: updates },
-          { new: true, runValidators: false }
-        ).lean();
+        if (!updatedDoc) {
+          updatedDoc = await (Anime as any).findOneAndUpdate(
+            { $or: [{ id: cleanId }, { slug: cleanId }] },
+            { $set: updates },
+            { new: true, runValidators: false }
+          ).lean();
+        }
       } catch (dbErr) {
         console.warn('[Anime Update] MongoDB findOneAndUpdate note:', dbErr);
       }
@@ -388,7 +400,7 @@ export const animeController = {
   async deleteAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim()) {
+    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
@@ -397,23 +409,21 @@ export const animeController = {
       const cleanId = id.trim();
       let deleted = false;
 
-      // 1. Try finding and deleting from MongoDB with multiple matching identifiers
+      // 1. Try finding and deleting from MongoDB
       try {
-        const queryConditions: any[] = [{ id: cleanId }, { slug: cleanId }];
-        if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
-          queryConditions.push({ _id: cleanId });
+        if (mongoose.Types.ObjectId.isValid(cleanId)) {
+          const doc = await (Anime as any).findById(cleanId);
+          if (doc) {
+            await (Anime as any).deleteOne({ _id: doc._id });
+            await (Episode as any).deleteMany({ $or: [{ animeId: String(doc._id) }, { animeId: doc.id }, { animeId: doc.slug }] }).catch(() => {});
+            deleted = true;
+          }
         }
-
-        // First find the doc in MongoDB if it exists
-        const existingDoc = await (Anime as any).findOne({ $or: queryConditions });
-        if (existingDoc) {
-          await (Anime as any).deleteOne({ _id: existingDoc._id });
-          await (Episode as any).deleteMany({ $or: [{ animeId: cleanId }, { animeId: existingDoc.id }] }).catch(() => {});
-          deleted = true;
-        } else {
-          const resDb = await (Anime as any).deleteOne({ $or: queryConditions });
-          await (Episode as any).deleteMany({ animeId: cleanId }).catch(() => {});
-          if (resDb.deletedCount > 0) {
+        if (!deleted) {
+          const existingDoc = await (Anime as any).findOne({ $or: [{ id: cleanId }, { slug: cleanId }] });
+          if (existingDoc) {
+            await (Anime as any).deleteOne({ _id: existingDoc._id });
+            await (Episode as any).deleteMany({ $or: [{ animeId: String(existingDoc._id) }, { animeId: existingDoc.id }, { animeId: existingDoc.slug }] }).catch(() => {});
             deleted = true;
           }
         }
