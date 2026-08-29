@@ -62,7 +62,7 @@ export const AdminAnimeListPage: React.FC = () => {
       } else if (err?.response?.status === 500) {
         setFetchError('Server error. Please try again.');
       } else {
-        setFetchError('Unable to load Anime.');
+        setFetchError('Unable to load Anime. Please try again.');
       }
     } finally {
       setIsLoading(false);
