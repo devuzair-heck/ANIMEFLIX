@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Anime, IAnime, IEpisode } from '../models/Anime.js';
 import { Episode } from '../models/Episode.js';
 import { INITIAL_ANIME_SEED } from '../data/defaultCatalog.js';
+import { connectDB } from '../config/db.js';
 
 // In-memory fallback anime store for resilient operation when MongoDB is offline
 export const inMemoryAnimeList: IAnime[] = [...(INITIAL_ANIME_SEED as unknown as IAnime[])];
@@ -12,6 +13,7 @@ export const inMemoryAnimeList: IAnime[] = [...(INITIAL_ANIME_SEED as unknown as
  */
 export async function seedInitialAnimeCatalog(demoAnimeList?: any[]): Promise<void> {
   try {
+    await connectDB();
     const seedList = demoAnimeList && demoAnimeList.length > 0 ? demoAnimeList : INITIAL_ANIME_SEED;
     const count = await (Anime as any).countDocuments();
     if (count === 0 && seedList && seedList.length > 0) {
@@ -44,6 +46,7 @@ export const animeController = {
    */
   async getAllAnime(req: Request, res: Response): Promise<void> {
     try {
+      await connectDB();
       const { search, genre, status, type, sortBy } = req.query;
 
       let query: any = {};
@@ -115,6 +118,7 @@ export const animeController = {
     }
 
     try {
+      await connectDB();
       const cleanId = id.trim();
       let anime: any = null;
       try {
@@ -155,6 +159,7 @@ export const animeController = {
    */
   async createAnime(req: Request, res: Response): Promise<void> {
     try {
+      await connectDB();
       const {
         title,
         japaneseTitle,
@@ -313,6 +318,7 @@ export const animeController = {
     }
 
     try {
+      await connectDB();
       const cleanId = id.trim();
       const updates = { ...req.body };
       // Critical: Never allow _id, __v, or unique ID/slug fields to be corrupted during update
@@ -406,6 +412,7 @@ export const animeController = {
     }
 
     try {
+      await connectDB();
       const cleanId = id.trim();
       let deleted = false;
 
