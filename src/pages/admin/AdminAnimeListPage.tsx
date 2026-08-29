@@ -48,13 +48,22 @@ export const AdminAnimeListPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const fetchAnime = async () => {
     setIsLoading(true);
+    setFetchError(null);
     try {
       const data = await animeService.getAllAnime();
       setAnimeList(data);
-    } catch {
-      // Handled
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        setFetchError('Session expired. Please login again.');
+      } else if (err?.response?.status === 500) {
+        setFetchError('Server error. Please try again.');
+      } else {
+        setFetchError('Unable to load Anime.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -252,6 +261,18 @@ export const AdminAnimeListPage: React.FC = () => {
             <div className="py-20 flex flex-col items-center justify-center gap-3">
               <Loader2 className="w-8 h-8 text-[#DC143C] animate-spin" />
               <span className="text-xs text-neutral-400 font-medium">Loading anime...</span>
+            </div>
+          ) : fetchError ? (
+            <div className="py-20 flex flex-col items-center justify-center text-center px-4">
+              <AlertCircle className="w-10 h-10 text-red-500 mb-3" />
+              <h3 className="text-base font-bold text-white uppercase">{fetchError}</h3>
+              <button
+                type="button"
+                onClick={fetchAnime}
+                className="mt-4 px-4 py-2 bg-[#DC143C] hover:bg-[#b01030] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors"
+              >
+                Try Again
+              </button>
             </div>
           ) : filteredAnime.length === 0 ? (
             <div className="py-20 flex flex-col items-center justify-center text-center px-4">
