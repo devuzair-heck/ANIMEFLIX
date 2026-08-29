@@ -56,19 +56,35 @@ export async function connectDB(): Promise<void> {
   // 3. Boot Embedded MongoDB Server instance
   try {
     const { MongoMemoryServer } = await import('mongodb-memory-server');
+    const dbDir = path.join(process.cwd(), '.mongo-data');
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     if (!mongoMemoryServer) {
-      mongoMemoryServer = await MongoMemoryServer.create({
-        instance: {
-          dbName: 'animeflix',
-        },
-      });
+      try {
+        mongoMemoryServer = await MongoMemoryServer.create({
+          instance: {
+            dbName: 'animeflix',
+            dbPath: dbDir,
+            storageEngine: 'wiredTiger',
+          },
+        });
+      } catch (memErr) {
+        console.warn('[Database] Persistent MongoMemoryServer note, trying fallback in-memory mode:', memErr);
+        mongoMemoryServer = await MongoMemoryServer.create({
+          instance: {
+            dbName: 'animeflix',
+          },
+        });
+      }
     }
 
     const embeddedUri = mongoMemoryServer.getUri();
     await mongoose.connect(embeddedUri, {
       dbName: 'animeflix',
     });
-    console.log(`[Database] MongoDB Server active and connected at ${embeddedUri} (db: animeflix)`);
+    console.log(`[Database] MongoDB Server active and connected at ${embeddedUri} (db: animeflix, persistence: .mongo-data)`);
   } catch (err) {
     console.error('[Database] Critical: Could not start or connect to MongoDB server:', err);
   } finally {
