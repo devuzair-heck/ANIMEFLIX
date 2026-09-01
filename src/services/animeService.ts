@@ -24,7 +24,7 @@ export const animeService = {
     try {
       const response = await apiClient.get<any>('/api/anime', { params });
       const raw = response?.data;
-      let list: Anime[] | null = null;
+      let list: Anime[] = [];
       if (Array.isArray(raw)) {
         list = raw;
       } else if (raw && typeof raw === 'object') {
@@ -32,14 +32,12 @@ export const animeService = {
         else if (Array.isArray(raw.anime)) list = raw.anime;
         else if (Array.isArray(raw.results)) list = raw.results;
       }
-      if (list && Array.isArray(list)) {
-        syncLocalCatalog(list);
-        return list;
-      }
+      syncLocalCatalog(list);
+      return list;
     } catch (err) {
-      console.warn('[animeService.getAllAnime] Error fetching anime from server:', err);
+      console.error('[animeService.getAllAnime] Error fetching anime from server:', err);
+      throw err;
     }
-    return DEMO_ANIME;
   },
 
   /**

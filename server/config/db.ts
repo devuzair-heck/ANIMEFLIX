@@ -133,6 +133,8 @@ export async function connectDB(): Promise<void> {
         },
       });
       const fallbackUri = mongoMemoryServer.getUri() + 'animeflix';
+      fs.writeFileSync(uriFile, fallbackUri, 'utf8');
+      process.env.MONGO_URI = fallbackUri;
       await mongoose.connect(fallbackUri, { dbName: 'animeflix' });
       console.log(`[Database] Fallback memory MongoDB active at ${fallbackUri}`);
     } catch (fallbackErr) {
