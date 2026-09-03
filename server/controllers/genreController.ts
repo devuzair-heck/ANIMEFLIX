@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Genre, IGenre } from '../models/Genre.js';
-import { inMemoryAnimeList } from './animeController.js';
+import { Anime } from '../models/Anime.js';
 
 // Default Genres preset
 export const DEFAULT_GENRES: Array<Partial<IGenre>> = [
@@ -29,13 +29,20 @@ export const inMemoryGenres: IGenre[] = DEFAULT_GENRES.map((g) => ({
   updatedAt: new Date(),
 } as unknown as IGenre));
 
-// Compute initial counts from inMemoryAnimeList
-function updateGenreCounts() {
-  inMemoryGenres.forEach((genre) => {
-    genre.animeCount = inMemoryAnimeList.filter((a) =>
-      a.genres?.some((g) => g.toLowerCase() === genre.name.toLowerCase() || g.toLowerCase() === genre.slug.toLowerCase())
-    ).length;
-  });
+// Compute initial counts from database
+async function updateGenreCounts() {
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const animes: any[] = await (Anime as any).find({}, { genres: 1 }).lean();
+      inMemoryGenres.forEach((genre) => {
+        genre.animeCount = animes.filter((a: any) =>
+          a.genres?.some((g: string) => g.toLowerCase() === genre.name.toLowerCase() || g.toLowerCase() === (genre.slug || '').toLowerCase())
+        ).length;
+      });
+    } catch {
+      // Ignored
+    }
+  }
 }
 updateGenreCounts();
 

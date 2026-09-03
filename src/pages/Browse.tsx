@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Filter, SlidersHorizontal, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
-import { DEMO_ANIME, GENRES_LIST } from '../utils/animeData';
+import { Filter, SlidersHorizontal, RotateCcw, ChevronDown, ChevronUp, AlertCircle, RefreshCw } from 'lucide-react';
+import { GENRES_LIST } from '../utils/animeData';
 import { AnimeCard } from '../components/AnimeCard';
 import { SearchBar } from '../components/SearchBar';
 import { EmptyState } from '../components/EmptyState';
 import { LoadingGrid } from '../components/Loading';
 import { FilterDrawer } from '../components/FilterDrawer';
+import { animeService } from '../services/animeService';
+import { Anime } from '../types/anime';
 
 const YEARS = ['All', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', 'Older'];
 const STATUS_OPTIONS = ['All', 'Ongoing', 'Completed'];
@@ -28,7 +30,27 @@ const SORT_OPTIONS = [
 export const Browse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fetchAnimeData = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const data = await animeService.getAllAnime();
+      setAnimeList(data);
+    } catch (err: any) {
+      console.error('[Browse Error] Failed to fetch catalog:', err);
+      setFetchError('Unable to load catalog from database.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnimeData();
+  }, []);
 
   // Read URL query params with defaults
   const searchQuery = searchParams.get('q') || searchParams.get('search') || '';
@@ -41,7 +63,6 @@ export const Browse: React.FC = () => {
 
   // Helper to update individual parameter while preserving others
   const updateParam = (key: string, value: string) => {
-    setIsLoading(true);
     const newParams = new URLSearchParams(searchParams);
     if (value === 'All' || value === '' || (key === 'sort' && value === 'popularity')) {
       newParams.delete(key);
@@ -50,7 +71,6 @@ export const Browse: React.FC = () => {
       newParams.set(key, value);
     }
     setSearchParams(newParams);
-    setTimeout(() => setIsLoading(false), 150);
   };
 
   const handleSearchChange = (q: string) => {
@@ -58,9 +78,7 @@ export const Browse: React.FC = () => {
   };
 
   const resetAllFilters = () => {
-    setIsLoading(true);
     setSearchParams({});
-    setTimeout(() => setIsLoading(false), 150);
   };
 
   // Check if any filter is active
@@ -76,7 +94,7 @@ export const Browse: React.FC = () => {
 
   // Combined Filtering Logic
   const filteredAnime = useMemo(() => {
-    return DEMO_ANIME.filter((anime) => {
+    return animeList.filter((anime) => {
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -359,7 +377,20 @@ export const Browse: React.FC = () => {
         </div>
 
         {/* Anime Cards Grid */}
-        {isLoading ? (
+        {fetchError ? (
+          <div className="p-8 rounded-2xl bg-red-950/40 border border-red-500/30 text-center flex flex-col items-center">
+            <AlertCircle className="w-10 h-10 text-red-400 mb-2" />
+            <h3 className="text-lg font-bold text-white mb-1">Database Error</h3>
+            <p className="text-xs text-neutral-400 mb-4">{fetchError}</p>
+            <button
+              onClick={fetchAnimeData}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        ) : isLoading ? (
           <LoadingGrid count={10} />
         ) : filteredAnime.length === 0 ? (
           <EmptyState

@@ -107,13 +107,21 @@ export const AdminAddAnimePage: React.FC = () => {
       };
 
       const res = await animeService.createAnime(payload);
-      if (res.success) {
+      if (res.success && res.data) {
+        const createdId = (res.data as any)._id || res.data.id;
+        const verified = await animeService.getAnimeById(createdId).catch(() => null);
+        if (!verified) {
+          setErrorMessage('Database verification warning: Newly created anime could not be confirmed in MongoDB.');
+          setIsSubmitting(false);
+          return;
+        }
+
         navigate('/admin/anime', {
           replace: true,
-          state: { successMessage: 'Anime created successfully.' },
+          state: { successMessage: `Anime "${verified.title}" created and verified in database successfully.` },
         });
       } else {
-        setErrorMessage(res.message || 'Failed to add anime.');
+        setErrorMessage(res.message || 'Failed to add anime to database.');
         setIsSubmitting(false);
       }
     } catch {

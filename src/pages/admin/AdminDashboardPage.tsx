@@ -40,37 +40,22 @@ export const AdminDashboardPage: React.FC = () => {
     setIsLoading(true);
     setStatsError(null);
     try {
-      // Fetch both catalog and dynamic backend metrics
+      // Fetch both catalog and dynamic backend metrics directly from database
       const [animes, statsRes] = await Promise.all([
-        animeService.getAllAnime().catch(() => []),
-        adminAuthService.getDashboardStats().catch(() => ({
-          success: false,
-          data: { totalAnime: 0, totalEpisodes: 0, publishedAnime: 0, draftAnime: 0 },
-          error: 'Unable to load dashboard statistics.',
-        })),
+        animeService.getAllAnime(),
+        adminAuthService.getDashboardStats(),
       ]);
 
       setAnimeList(animes || []);
 
       if (statsRes && statsRes.success && statsRes.data) {
         setStats(statsRes.data);
-      } else {
-        if (statsRes && 'error' in statsRes && statsRes.error) {
-          setStatsError(statsRes.error);
-        }
-        // Fallback calculation directly from fetched catalog
-        const totalEp = (animes || []).reduce((acc, a) => acc + (a.episodes?.length || a.episodesCount || 0), 0);
-        const draftCount = (animes || []).filter((a) => (a as any).status === 'Draft' || (a as any).isPublished === false).length;
-        setStats({
-          totalAnime: (animes || []).length,
-          totalEpisodes: totalEp,
-          publishedAnime: (animes || []).length - draftCount,
-          draftAnime: draftCount,
-        });
+      } else if (statsRes && statsRes.error) {
+        setStatsError(statsRes.error);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Admin Dashboard] Load error:', err);
-      setStatsError('Unable to load dashboard statistics.');
+      setStatsError('Unable to load dashboard data from database.');
     } finally {
       setIsLoading(false);
     }
@@ -84,10 +69,14 @@ export const AdminDashboardPage: React.FC = () => {
     setIsRefreshingStats(true);
     setStatsError(null);
     try {
-      const statsRes = await adminAuthService.getDashboardStats();
-      if (statsRes.success && statsRes.data) {
+      const [animes, statsRes] = await Promise.all([
+        animeService.getAllAnime(),
+        adminAuthService.getDashboardStats(),
+      ]);
+      setAnimeList(animes || []);
+      if (statsRes && statsRes.success && statsRes.data) {
         setStats(statsRes.data);
-      } else if (statsRes.error) {
+      } else if (statsRes && statsRes.error) {
         setStatsError(statsRes.error);
       }
     } catch {
@@ -103,12 +92,11 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       const targetId = (deleteTarget as any)._id || deleteTarget.id;
       await animeService.deleteAnime(targetId);
-      setAnimeList((prev) => prev.filter((a) => a.id !== deleteTarget.id && (a as any)._id !== (deleteTarget as any)._id));
       setDeleteTarget(null);
-      // Refresh stats after deletion
+      // Immediately reload data to ensure exact MongoDB sync
       await refreshStats();
-    } catch {
-      // Handled
+    } catch (err: any) {
+      setStatsError(err?.message || 'Failed to delete anime.');
     } finally {
       setIsDeleting(false);
     }

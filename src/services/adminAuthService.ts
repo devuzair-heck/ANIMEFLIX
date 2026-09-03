@@ -236,7 +236,7 @@ export const adminAuthService = {
 
   /**
    * GET /api/admin/dashboard/stats
-   * Fetches realtime statistics directly from backend or falls back seamlessly
+   * Fetches realtime statistics directly from MongoDB backend
    */
   async getDashboardStats(): Promise<{ success: boolean; data?: DashboardStats; error?: string }> {
     try {
@@ -251,13 +251,16 @@ export const adminAuthService = {
         };
         return { success: true, data: stats };
       }
-    } catch {
-      // Fallback
+      return {
+        success: false,
+        error: payload?.message || 'Unexpected stats response format',
+      };
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Database error: Failed to fetch dashboard stats';
+      return {
+        success: false,
+        error: msg,
+      };
     }
-
-    return {
-      success: true,
-      data: { totalAnime: 12, totalEpisodes: 240, publishedAnime: 12, draftAnime: 0 },
-    };
   },
 };

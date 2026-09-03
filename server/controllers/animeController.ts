@@ -5,51 +5,41 @@ import { Episode } from '../models/Episode.js';
 import { INITIAL_ANIME_SEED } from '../data/defaultCatalog.js';
 import { connectDB } from '../config/db.js';
 
-// In-memory fallback anime store for resilient operation when MongoDB is offline
-export const inMemoryAnimeList: IAnime[] = [...(INITIAL_ANIME_SEED as unknown as IAnime[])];
-
 /**
- * Helper to seed initial anime catalog if database is empty
+ * Helper to seed initial anime catalog safely and idempotently.
+ * NEVER drops, replaces, or deletes any existing records.
+ * Only inserts a seed anime if neither its id nor slug already exists in MongoDB.
  */
-export async function seedInitialAnimeCatalog(demoAnimeList?: any[]): Promise<void> {
+export async function seedInitialAnimeCatalog(): Promise<void> {
   try {
     await connectDB();
-    const seedList = demoAnimeList && demoAnimeList.length > 0 ? demoAnimeList : INITIAL_ANIME_SEED;
-    const count = await (Anime as any).countDocuments();
-    if (count === 0 && seedList && seedList.length > 0) {
-      await Anime.insertMany(seedList);
-      console.log(`[Anime Seed] ${seedList.length} anime seeded into MongoDB.`);
-    } else {
-      console.log(`[Anime DB] MongoDB contains ${count} anime documents.`);
-    }
-  } catch (err) {
-    console.warn('[Anime Seed] MongoDB check notice:', err);
-    // In-memory fallback
-    if (inMemoryAnimeList.length === 0) {
-      const fallbackList = demoAnimeList && demoAnimeList.length > 0 ? demoAnimeList : INITIAL_ANIME_SEED;
-      fallbackList.forEach((item) => {
-        inMemoryAnimeList.push({
-          ...item,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as unknown as IAnime);
+    for (const item of INITIAL_ANIME_SEED) {
+      const existing = await (Anime as any).findOne({
+        $or: [{ id: item.id }, { slug: item.slug }],
       });
-      console.log(`[Anime Fallback] ${inMemoryAnimeList.length} anime initialized in memory store.`);
+      if (!existing) {
+        await (Anime as any).create(item);
+        console.log(`[Anime Seed] Seeded missing default anime: ${item.title}`);
+      }
     }
+    const totalCount = await (Anime as any).countDocuments();
+    console.log(`[Anime DB] Total anime documents in MongoDB: ${totalCount}`);
+  } catch (err) {
+    console.error('[Anime Seed Error] Could not verify/seed catalog in MongoDB:', err);
   }
 }
 
 export const animeController = {
   /**
    * GET /api/anime
-   * Returns list of anime with optional query filters
+   * Returns list of anime from MongoDB with optional query filters
    */
   async getAllAnime(req: Request, res: Response): Promise<void> {
     try {
       await connectDB();
       const { search, genre, status, type, sortBy } = req.query;
 
-      let query: any = {};
+      const query: any = {};
       if (genre && typeof genre === 'string' && genre !== 'All') {
         query.genres = { $in: [new RegExp(`^${genre}$`, 'i')] };
       }
@@ -61,58 +51,55 @@ export const animeController = {
       }
       if (search && typeof search === 'string' && search.trim()) {
         const searchRegex = new RegExp(search.trim(), 'i');
-        query.$or = [{ title: searchRegex }, { japaneseTitle: searchRegex }, { description: searchRegex }];
+        query.$or = [
+          { title: searchRegex },
+          { japaneseTitle: searchRegex },
+          { description: searchRegex },
+        ];
       }
 
-      let animeList: IAnime[] = [];
-      try {
-        let findQuery = (Anime as any).find(query);
-        if (sortBy === 'rating') findQuery = findQuery.sort({ rating: -1 });
-        else if (sortBy === 'latest' || sortBy === 'year') findQuery = findQuery.sort({ year: -1, createdAt: -1 });
-        else if (sortBy === 'title') findQuery = findQuery.sort({ title: 1 });
-        else findQuery = findQuery.sort({ createdAt: -1 });
-
-        animeList = await findQuery.lean();
-      } catch {
-        // Fallback to in-memory filter
-        animeList = inMemoryAnimeList.filter((a) => {
-          if (genre && genre !== 'All' && !a.genres.some((g) => g.toLowerCase() === String(genre).toLowerCase())) return false;
-          if (status && status !== 'All' && a.status.toLowerCase() !== String(status).toLowerCase()) return false;
-          if (type && type !== 'All' && a.type.toLowerCase() !== String(type).toLowerCase()) return false;
-          if (search && typeof search === 'string' && search.trim()) {
-            const s = search.toLowerCase();
-            const matches =
-              a.title.toLowerCase().includes(s) ||
-              (a.japaneseTitle && a.japaneseTitle.toLowerCase().includes(s)) ||
-              (a.description && a.description.toLowerCase().includes(s));
-            if (!matches) return false;
-          }
-          return true;
-        });
-
-        if (sortBy === 'rating') animeList.sort((a, b) => b.rating - a.rating);
-        else if (sortBy === 'title') animeList.sort((a, b) => a.title.localeCompare(b.title));
-        else animeList.sort((a, b) => b.year - a.year);
+      let findQuery = (Anime as any).find(query);
+      if (sortBy === 'rating') {
+        findQuery = findQuery.sort({ rating: -1 });
+      } else if (sortBy === 'latest' || sortBy === 'year') {
+        findQuery = findQuery.sort({ year: -1, createdAt: -1 });
+      } else if (sortBy === 'title') {
+        findQuery = findQuery.sort({ title: 1 });
+      } else {
+        findQuery = findQuery.sort({ createdAt: -1 });
       }
+
+      const animeList = await findQuery.lean();
 
       res.status(200).json({
         success: true,
         count: animeList.length,
         data: animeList,
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to retrieve anime catalog' });
+    } catch (err: any) {
+      console.error('[getAllAnime Error]', err);
+      res.status(500).json({
+        success: false,
+        message: 'Database error: Failed to retrieve anime catalog from MongoDB.',
+      });
     }
   },
 
   /**
    * GET /api/anime/:id
-   * Fetch single anime by ID or slug
+   * Fetch single anime from MongoDB by _id, id, or slug
    */
   async getAnimeById(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
+    if (
+      !id ||
+      typeof id !== 'string' ||
+      !id.trim() ||
+      id === 'undefined' ||
+      id === 'null' ||
+      id === '[object Object]'
+    ) {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
@@ -121,41 +108,38 @@ export const animeController = {
       await connectDB();
       const cleanId = id.trim();
       let anime: any = null;
-      try {
-        if (mongoose.Types.ObjectId.isValid(cleanId)) {
-          anime = await (Anime as any).findById(cleanId).lean();
-        }
-        if (!anime) {
-          anime = await (Anime as any).findOne({ $or: [{ id: cleanId }, { slug: cleanId }] }).lean();
-        }
-      } catch (dbErr) {
-        console.warn('[Anime getAnimeById] MongoDB query warning:', dbErr);
+
+      if (mongoose.Types.ObjectId.isValid(cleanId)) {
+        anime = await (Anime as any).findById(cleanId).lean();
+      }
+      if (!anime) {
+        anime = await (Anime as any).findOne({
+          $or: [{ id: cleanId }, { slug: cleanId }],
+        }).lean();
       }
 
       if (!anime) {
-        anime = inMemoryAnimeList.find(
-          (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
-        ) || null;
-      }
-
-      if (!anime) {
-        res.status(404).json({ success: false, message: 'Anime not found' });
+        res.status(404).json({ success: false, message: 'Anime not found in database' });
         return;
       }
 
-      if (anime && anime._id) {
+      if (anime._id) {
         anime._id = String(anime._id);
       }
 
       res.status(200).json({ success: true, data: anime, anime });
-    } catch {
-      res.status(500).json({ success: false, message: 'Error retrieving anime' });
+    } catch (err: any) {
+      console.error('[getAnimeById Error]', err);
+      res.status(500).json({
+        success: false,
+        message: 'Database error: Failed to retrieve anime from MongoDB.',
+      });
     }
   },
 
   /**
    * POST /api/anime
-   * Admin: Add new anime
+   * Admin: Add new anime directly into MongoDB and verify persistence
    */
   async createAnime(req: Request, res: Response): Promise<void> {
     try {
@@ -194,40 +178,43 @@ export const animeController = {
         return;
       }
 
-      const baseSlug = title
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '') || `anime-${Date.now()}`;
+      const baseSlug =
+        title
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)+/g, '') || `anime-${Date.now()}`;
 
       let generatedSlug = baseSlug;
       let finalId = req.body.id || baseSlug;
 
       // Ensure slug and id uniqueness in database
-      try {
-        const existingDoc = await (Anime as any).findOne({ $or: [{ id: finalId }, { slug: generatedSlug }] });
-        if (existingDoc) {
-          const suffix = Math.random().toString(36).substring(2, 7);
-          generatedSlug = `${baseSlug}-${suffix}`;
-          finalId = req.body.id ? `${req.body.id}-${suffix}` : generatedSlug;
-        }
-      } catch {
-        // Handled
+      const existingDoc = await (Anime as any).findOne({
+        $or: [{ id: finalId }, { slug: generatedSlug }],
+      });
+      if (existingDoc) {
+        const suffix = Math.random().toString(36).substring(2, 7);
+        generatedSlug = `${baseSlug}-${suffix}`;
+        finalId = req.body.id ? `${req.body.id}-${suffix}` : generatedSlug;
       }
 
       // Normalize genres array
       let finalGenres: string[] = [];
-      if (Array.isArray(genres)) finalGenres = genres;
-      else if (typeof genre === 'string' && genre.trim()) {
+      if (Array.isArray(genres)) {
+        finalGenres = genres.map((g: any) => String(g).trim()).filter(Boolean);
+      } else if (typeof genre === 'string' && genre.trim()) {
         finalGenres = genre.split(',').map((g) => g.trim()).filter(Boolean);
       } else if (Array.isArray(genre)) {
-        finalGenres = genre;
+        finalGenres = genre.map((g: any) => String(g).trim()).filter(Boolean);
       }
 
       const finalYear = Number(releaseYear || year) || new Date().getFullYear();
       const finalRating = Number(rating) || 8.0;
       const finalEpisodesCount = Number(totalEpisodes || episodesCount) || 12;
-      const finalPoster = poster || posterImage || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
+      const finalPoster =
+        poster ||
+        posterImage ||
+        'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80';
       const finalBanner = banner || bannerImage || finalPoster;
 
       const newAnimeData = {
@@ -255,64 +242,87 @@ export const animeController = {
         isTopRated: finalRating >= 8.5,
         isRecentlyAdded: true,
         featuredInHero: Boolean(isFeatured ?? featured),
-        episodes: Array.isArray(req.body.episodes) && req.body.episodes.length > 0
-          ? req.body.episodes
-          : Array.from({ length: Math.min(finalEpisodesCount, 12) }, (_, i) => ({
-              id: `${finalId}-ep-${i + 1}`,
-              number: i + 1,
-              title: `Episode ${i + 1}`,
-              thumbnail: finalBanner,
-              duration: duration || '24m',
-              airDate: `${finalYear}-01-01`,
-              description: `Episode ${i + 1} of ${title}.`,
-              videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-              language: language || 'Japanese',
-              subtitle: 'English',
-              isDubbed: false,
-              isPublished: true,
-            })),
+        episodes:
+          Array.isArray(req.body.episodes) && req.body.episodes.length > 0
+            ? req.body.episodes
+            : Array.from({ length: Math.min(finalEpisodesCount, 24) }, (_, i) => ({
+                id: `${finalId}-ep-${i + 1}`,
+                number: i + 1,
+                title: `Episode ${i + 1}`,
+                thumbnail: finalBanner,
+                duration: duration || '24m',
+                airDate: `${finalYear}-01-01`,
+                description: `Episode ${i + 1} of ${title}.`,
+                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                language: language || 'Japanese',
+                subtitle: 'English',
+                isDubbed: false,
+                isPublished: true,
+              })),
         characters: req.body.characters || [],
       };
 
-      let createdAnime: any = null;
-      try {
-        const createdDoc = await Anime.create(newAnimeData);
-        createdAnime = createdDoc.toObject ? createdDoc.toObject() : createdDoc;
-      } catch (dbErr) {
-        console.warn('[createAnime] MongoDB insert notice:', dbErr);
-        // In-memory fallback
-        createdAnime = {
-          ...newAnimeData,
-          _id: `anime-${Date.now()}`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        inMemoryAnimeList.unshift(createdAnime);
+      // 1. Insert directly into MongoDB
+      const createdDoc = await (Anime as any).create(newAnimeData);
+
+      if (!createdDoc || !createdDoc._id) {
+        res.status(500).json({
+          success: false,
+          message: 'Database error: MongoDB document creation returned empty result.',
+        });
+        return;
       }
 
-      if (createdAnime && createdAnime._id) {
-        createdAnime._id = String(createdAnime._id);
+      // 2. Perform verification fetch from MongoDB
+      const verifiedDoc = await (Anime as any).findById(createdDoc._id).lean();
+
+      if (!verifiedDoc) {
+        res.status(500).json({
+          success: false,
+          message: 'Database persistence verification failed: Document was not found in MongoDB after insert.',
+        });
+        return;
       }
+
+      verifiedDoc._id = String(verifiedDoc._id);
+
+      console.log(`[ANIME CREATE]
+id: ${verifiedDoc._id}
+title: ${verifiedDoc.title}
+episodesCount: ${verifiedDoc.episodesCount}
+timestamp: ${new Date().toISOString()}
+route: POST /api/anime`);
 
       res.status(201).json({
         success: true,
-        message: 'Anime added successfully',
-        data: createdAnime,
-        anime: createdAnime,
+        message: 'Anime added successfully to database',
+        data: verifiedDoc,
+        anime: verifiedDoc,
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to create anime entry' });
+    } catch (err: any) {
+      console.error('[createAnime Error]', err);
+      res.status(500).json({
+        success: false,
+        message: err?.message || 'Failed to create anime document in database',
+      });
     }
   },
 
   /**
    * PUT /api/anime/:id
-   * Admin: Update anime without duplicating or deleting records
+   * Admin: Update anime in MongoDB without recreating or deleting document
    */
   async updateAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
+    if (
+      !id ||
+      typeof id !== 'string' ||
+      !id.trim() ||
+      id === 'undefined' ||
+      id === 'null' ||
+      id === '[object Object]'
+    ) {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
@@ -320,93 +330,177 @@ export const animeController = {
     try {
       await connectDB();
       const cleanId = id.trim();
-      const updates = { ...req.body };
-      // Critical: Never allow _id, __v, or unique ID/slug fields to be corrupted during update
-      delete updates._id;
-      delete updates.__v;
-      delete updates.id;
-      delete updates.slug;
 
-      // Clean up aliases and normalize numeric fields
-      if (updates.posterImage) updates.poster = updates.posterImage;
-      if (updates.bannerImage) updates.banner = updates.bannerImage;
-      if (updates.releaseYear !== undefined) updates.year = Number(updates.releaseYear);
-      if (updates.totalEpisodes !== undefined) updates.episodesCount = Number(updates.totalEpisodes);
-      if (updates.episodesCount !== undefined) updates.episodesCount = Number(updates.episodesCount);
-      if (updates.rating !== undefined) updates.rating = Number(updates.rating);
-      if (updates.year !== undefined) updates.year = Number(updates.year);
-      if (updates.genres && Array.isArray(updates.genres)) {
-        updates.genres = updates.genres.map((g: any) => String(g).trim()).filter(Boolean);
-      } else if (updates.genre && typeof updates.genre === 'string') {
-        updates.genres = updates.genre.split(',').map((g: string) => g.trim()).filter(Boolean);
+      // Find existing document first to ensure it exists and preserve its identity
+      let existingDoc: any = null;
+      if (mongoose.Types.ObjectId.isValid(cleanId)) {
+        existingDoc = await (Anime as any).findById(cleanId);
+      }
+      if (!existingDoc) {
+        existingDoc = await (Anime as any).findOne({
+          $or: [{ id: cleanId }, { slug: cleanId }],
+        });
       }
 
-      let updatedDoc: any = null;
-
-      // 1. Try finding and updating in MongoDB
-      try {
-        if (mongoose.Types.ObjectId.isValid(cleanId)) {
-          updatedDoc = await (Anime as any).findByIdAndUpdate(
-            cleanId,
-            { $set: updates },
-            { new: true, runValidators: false }
-          ).lean();
-        }
-        if (!updatedDoc) {
-          updatedDoc = await (Anime as any).findOneAndUpdate(
-            { $or: [{ id: cleanId }, { slug: cleanId }] },
-            { $set: updates },
-            { new: true, runValidators: false }
-          ).lean();
-        }
-      } catch (dbErr) {
-        console.warn('[Anime Update] MongoDB findOneAndUpdate note:', dbErr);
-      }
-
-      // 2. Also update fallback in-memory store if present
-      const memIndex = inMemoryAnimeList.findIndex(
-        (a) => (a as any)._id === cleanId || a.id === cleanId || a.slug === cleanId
-      );
-      if (memIndex !== -1) {
-        inMemoryAnimeList[memIndex] = {
-          ...inMemoryAnimeList[memIndex],
-          ...updates,
-          updatedAt: new Date(),
-        };
-        if (!updatedDoc) {
-          updatedDoc = inMemoryAnimeList[memIndex];
-        }
-      }
-
-      if (!updatedDoc) {
-        res.status(404).json({ success: false, message: 'Anime not found to update' });
+      if (!existingDoc) {
+        res.status(404).json({ success: false, message: 'Anime not found in database to update' });
         return;
       }
 
-      if (updatedDoc && updatedDoc._id) {
-        updatedDoc._id = String(updatedDoc._id);
+      const updates: Record<string, any> = {};
+
+      if (req.body.title !== undefined && String(req.body.title).trim()) {
+        updates.title = String(req.body.title).trim();
       }
+      if (req.body.japaneseTitle !== undefined) {
+        updates.japaneseTitle = String(req.body.japaneseTitle).trim();
+      }
+      if (req.body.description !== undefined) {
+        updates.description = String(req.body.description).trim();
+      }
+      if (req.body.poster || req.body.posterImage) {
+        updates.poster = String(req.body.poster || req.body.posterImage).trim();
+      }
+      if (req.body.banner || req.body.bannerImage) {
+        updates.banner = String(req.body.banner || req.body.bannerImage).trim();
+      }
+      if (req.body.releaseYear !== undefined || req.body.year !== undefined) {
+        updates.year = Number(req.body.releaseYear || req.body.year);
+      }
+      if (req.body.status !== undefined) {
+        updates.status = req.body.status === 'Completed' ? 'Completed' : 'Ongoing';
+      }
+      if (req.body.type !== undefined) {
+        updates.type = req.body.type;
+      }
+      if (req.body.rating !== undefined) {
+        updates.rating = Number(req.body.rating);
+        updates.isTopRated = updates.rating >= 8.5;
+      }
+      if (req.body.studio !== undefined) {
+        updates.studio = String(req.body.studio).trim();
+      }
+      if (req.body.duration !== undefined) {
+        updates.duration = String(req.body.duration).trim();
+      }
+      if (req.body.language !== undefined) {
+        updates.language = String(req.body.language).trim();
+      }
+      if (req.body.isSubbed !== undefined) {
+        updates.isSubbed = Boolean(req.body.isSubbed);
+      }
+      if (req.body.isDubbed !== undefined) {
+        updates.isDubbed = Boolean(req.body.isDubbed);
+      }
+      if (req.body.trailerUrl !== undefined) {
+        updates.trailerUrl = String(req.body.trailerUrl).trim();
+      }
+      if (req.body.featuredInHero !== undefined || req.body.isFeatured !== undefined) {
+        updates.featuredInHero = Boolean(req.body.featuredInHero ?? req.body.isFeatured);
+      }
+      if (req.body.isTrending !== undefined) {
+        updates.isTrending = Boolean(req.body.isTrending);
+      }
+      if (req.body.isPopular !== undefined) {
+        updates.isPopular = Boolean(req.body.isPopular);
+      }
+
+      // Handle genres
+      if (Array.isArray(req.body.genres)) {
+        updates.genres = req.body.genres.map((g: any) => String(g).trim()).filter(Boolean);
+      } else if (typeof req.body.genre === 'string' && req.body.genre.trim()) {
+        updates.genres = req.body.genre.split(',').map((g: string) => g.trim()).filter(Boolean);
+      }
+
+      // Safe episode count updates: preserve all existing episodes
+      const newEpCount =
+        req.body.episodesCount !== undefined
+          ? Number(req.body.episodesCount)
+          : req.body.totalEpisodes !== undefined
+          ? Number(req.body.totalEpisodes)
+          : undefined;
+
+      if (newEpCount !== undefined && !isNaN(newEpCount) && newEpCount >= 0) {
+        updates.episodesCount = newEpCount;
+        const currentEpisodes = Array.isArray(existingDoc.episodes) ? [...existingDoc.episodes] : [];
+
+        // If new count is greater than current episode objects, append new episode objects
+        if (currentEpisodes.length < newEpCount) {
+          const bannerToUse = updates.banner || existingDoc.banner || existingDoc.poster;
+          for (let i = currentEpisodes.length; i < newEpCount; i++) {
+            currentEpisodes.push({
+              id: `${existingDoc.id}-ep-${i + 1}`,
+              number: i + 1,
+              title: `Episode ${i + 1}`,
+              thumbnail: bannerToUse,
+              duration: updates.duration || existingDoc.duration || '24m',
+              airDate: new Date().toISOString().split('T')[0],
+              description: `Episode ${i + 1} of ${updates.title || existingDoc.title}.`,
+              videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+              language: updates.language || existingDoc.language || 'Japanese',
+              subtitle: 'English',
+              isDubbed: false,
+              isPublished: true,
+            });
+          }
+          updates.episodes = currentEpisodes;
+        }
+      }
+
+      // Perform atomic update using $set to keep document ID and unchanged fields completely intact
+      const updatedDoc = await (Anime as any).findByIdAndUpdate(
+        existingDoc._id,
+        { $set: updates },
+        { new: true, runValidators: false }
+      ).lean();
+
+      if (!updatedDoc) {
+        res.status(500).json({
+          success: false,
+          message: 'Database update failed: Document not returned from MongoDB after update.',
+        });
+        return;
+      }
+
+      updatedDoc._id = String(updatedDoc._id);
+
+      console.log(`[ANIME UPDATE]
+id: ${updatedDoc._id}
+title: ${updatedDoc.title}
+episodesCount: ${updatedDoc.episodesCount}
+timestamp: ${new Date().toISOString()}
+route: PUT /api/anime/${cleanId}`);
 
       res.status(200).json({
         success: true,
-        message: 'Anime updated successfully',
+        message: 'Anime updated successfully in database',
         data: updatedDoc,
         anime: updatedDoc,
       });
     } catch (err: any) {
-      console.error('[Anime Update] Internal server error:', err);
-      res.status(500).json({ success: false, message: 'Failed to update anime' });
+      console.error('[Anime Update Error]', err);
+      res.status(500).json({
+        success: false,
+        message: err?.message || 'Failed to update anime in MongoDB',
+      });
     }
   },
 
   /**
    * DELETE /api/anime/:id
-   * Admin: Delete anime
+   * Admin: Explicitly delete an anime from MongoDB
    */
   async deleteAnime(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
-    if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null' || id === '[object Object]') {
+    if (
+      !id ||
+      typeof id !== 'string' ||
+      !id.trim() ||
+      id === 'undefined' ||
+      id === 'null' ||
+      id === '[object Object]'
+    ) {
       res.status(400).json({ success: false, message: 'Invalid anime ID parameter' });
       return;
     }
@@ -414,78 +508,71 @@ export const animeController = {
     try {
       await connectDB();
       const cleanId = id.trim();
-      let deleted = false;
 
-      // 1. Try finding and deleting from MongoDB
-      try {
-        if (mongoose.Types.ObjectId.isValid(cleanId)) {
-          const doc = await (Anime as any).findById(cleanId);
-          if (doc) {
-            await (Anime as any).deleteOne({ _id: doc._id });
-            await (Episode as any).deleteMany({ $or: [{ animeId: String(doc._id) }, { animeId: doc.id }, { animeId: doc.slug }] }).catch(() => {});
-            deleted = true;
-          }
-        }
-        if (!deleted) {
-          const existingDoc = await (Anime as any).findOne({ $or: [{ id: cleanId }, { slug: cleanId }] });
-          if (existingDoc) {
-            await (Anime as any).deleteOne({ _id: existingDoc._id });
-            await (Episode as any).deleteMany({ $or: [{ animeId: String(existingDoc._id) }, { animeId: existingDoc.id }, { animeId: existingDoc.slug }] }).catch(() => {});
-            deleted = true;
-          }
-        }
-      } catch (dbErr) {
-        console.warn('[Anime Delete] MongoDB operation note:', dbErr);
+      let targetDoc: any = null;
+      if (mongoose.Types.ObjectId.isValid(cleanId)) {
+        targetDoc = await (Anime as any).findById(cleanId);
+      }
+      if (!targetDoc) {
+        targetDoc = await (Anime as any).findOne({
+          $or: [{ id: cleanId }, { slug: cleanId }],
+        });
       }
 
-      // 2. Also remove from inMemoryAnimeList fallback store if present
-      const memIndex = inMemoryAnimeList.findIndex(
-        (a) => a.id === cleanId || a.slug === cleanId || (a as any)._id === cleanId
-      );
-      if (memIndex !== -1) {
-        inMemoryAnimeList.splice(memIndex, 1);
-        deleted = true;
-      }
-
-      if (!deleted) {
-        res.status(404).json({ success: false, message: 'Anime not found' });
+      if (!targetDoc) {
+        res.status(404).json({ success: false, message: 'Anime not found in database to delete' });
         return;
       }
 
+      // Delete the anime document from MongoDB
+      await (Anime as any).deleteOne({ _id: targetDoc._id });
+
+      // Clean up any standalone Episode documents associated with this anime
+      await (Episode as any).deleteMany({
+        $or: [
+          { animeId: String(targetDoc._id) },
+          { animeId: targetDoc.id },
+          { animeId: targetDoc.slug },
+        ],
+      }).catch(() => {});
+
+      console.log(`[ANIME DELETE]
+id: ${targetDoc._id}
+title: ${targetDoc.title}
+timestamp: ${new Date().toISOString()}
+route: DELETE /api/anime/${cleanId}`);
+
       res.status(200).json({
         success: true,
-        message: 'Anime deleted successfully',
+        message: `Anime "${targetDoc.title}" deleted successfully from database`,
       });
     } catch (err: any) {
       console.error('[Anime Delete Error]', err);
-      res.status(500).json({ success: false, message: err?.message || 'Failed to delete anime' });
+      res.status(500).json({
+        success: false,
+        message: err?.message || 'Failed to delete anime from MongoDB',
+      });
     }
   },
 
   /**
    * GET /api/episodes
-   * Admin: List all episodes across all anime or filtered by animeId
+   * List all episodes from MongoDB
    */
   async getAllEpisodes(req: Request, res: Response): Promise<void> {
     try {
+      await connectDB();
       const { animeId } = req.query;
-      let allEpisodes: Array<IEpisode & { animeId: string; animeTitle: string }> = [];
+      const allEpisodes: Array<IEpisode & { animeId: string; animeTitle: string }> = [];
 
-      let animeList: IAnime[] = [];
-      try {
-        animeList = await (Anime as any).find({}).lean();
-      } catch {
-        animeList = inMemoryAnimeList;
-      }
-
-      if (animeList.length === 0) {
-        animeList = inMemoryAnimeList;
-      }
+      const animeList = await (Anime as any).find({}).lean();
 
       for (const a of animeList) {
-        if (animeId && a.id !== animeId && a.slug !== animeId) continue;
+        if (animeId && a.id !== animeId && a.slug !== animeId && String(a._id) !== animeId) {
+          continue;
+        }
         if (Array.isArray(a.episodes)) {
-          a.episodes.forEach((ep) => {
+          a.episodes.forEach((ep: any) => {
             allEpisodes.push({
               ...ep,
               animeId: a.id,
@@ -500,8 +587,9 @@ export const animeController = {
         count: allEpisodes.length,
         data: allEpisodes,
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to retrieve episodes' });
+    } catch (err: any) {
+      console.error('[getAllEpisodes Error]', err);
+      res.status(500).json({ success: false, message: 'Failed to retrieve episodes from database' });
     }
   },
 
@@ -511,15 +599,17 @@ export const animeController = {
   async getAnimeEpisodes(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     try {
-      let anime: IAnime | null = null;
-      try {
+      await connectDB();
+      let anime: any = null;
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        anime = await (Anime as any).findById(id).lean();
+      }
+      if (!anime) {
         anime = await (Anime as any).findOne({ $or: [{ id }, { slug: id }] }).lean();
-      } catch {
-        anime = inMemoryAnimeList.find((a) => a.id === id || a.slug === id) || null;
       }
 
       if (!anime) {
-        res.status(404).json({ success: false, message: 'Anime not found' });
+        res.status(404).json({ success: false, message: 'Anime not found in database' });
         return;
       }
 
@@ -527,14 +617,15 @@ export const animeController = {
         success: true,
         data: anime.episodes || [],
       });
-    } catch {
+    } catch (err: any) {
+      console.error('[getAnimeEpisodes Error]', err);
       res.status(500).json({ success: false, message: 'Failed to retrieve anime episodes' });
     }
   },
 
   /**
    * POST /api/anime/:id/episodes or POST /api/episodes
-   * Admin: Add new episode
+   * Admin: Add new episode directly to anime in MongoDB
    */
   async addEpisode(req: Request, res: Response): Promise<void> {
     const animeId = req.params.id || req.body.animeId;
@@ -544,174 +635,149 @@ export const animeController = {
       return;
     }
 
-    const {
-      number,
-      title,
-      description,
-      videoUrl,
-      thumbnail,
-      duration,
-      airDate,
-      language,
-      subtitle,
-      isDubbed,
-      isPublished,
-    } = req.body;
-
-    const newEpisode: IEpisode = {
-      id: req.body.id || `${animeId}-ep-${number || Date.now()}`,
-      number: Number(number) || 1,
-      title: title || `Episode ${number || 1}`,
-      description: description || '',
-      videoUrl: videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      thumbnail: thumbnail || '',
-      duration: duration || '24m',
-      airDate: airDate || new Date().toISOString().split('T')[0],
-      language: language || 'Japanese',
-      subtitle: subtitle || 'English',
-      isDubbed: Boolean(isDubbed),
-      isPublished: isPublished !== undefined ? Boolean(isPublished) : true,
-    };
-
     try {
-      let updated = false;
-      try {
-        const doc = await (Anime as any).findOne({ $or: [{ id: animeId }, { slug: animeId }] });
-        if (doc) {
-          doc.episodes.push(newEpisode);
-          doc.episodesCount = doc.episodes.length;
-          await doc.save();
-          updated = true;
-        }
-      } catch {
-        // In-memory fallback
+      await connectDB();
+      let targetAnime: any = null;
+      if (mongoose.Types.ObjectId.isValid(animeId)) {
+        targetAnime = await (Anime as any).findById(animeId);
+      }
+      if (!targetAnime) {
+        targetAnime = await (Anime as any).findOne({
+          $or: [{ id: animeId }, { slug: animeId }],
+        });
       }
 
-      const memAnime = inMemoryAnimeList.find((a) => a.id === animeId || a.slug === animeId);
-      if (memAnime) {
-        if (!memAnime.episodes) memAnime.episodes = [];
-        memAnime.episodes.push(newEpisode);
-        memAnime.episodesCount = memAnime.episodes.length;
-        updated = true;
-      }
-
-      if (!updated) {
-        res.status(404).json({ success: false, message: 'Target anime not found' });
+      if (!targetAnime) {
+        res.status(404).json({ success: false, message: 'Target anime not found in database' });
         return;
       }
 
+      const {
+        number,
+        title,
+        description,
+        videoUrl,
+        thumbnail,
+        duration,
+        airDate,
+        language,
+        subtitle,
+        isDubbed,
+        isPublished,
+      } = req.body;
+
+      const epNum = Number(number) || (targetAnime.episodes?.length || 0) + 1;
+      const newEpisode: IEpisode = {
+        id: req.body.id || `${targetAnime.id}-ep-${epNum}`,
+        number: epNum,
+        title: title || `Episode ${epNum}`,
+        description: description || '',
+        videoUrl:
+          videoUrl ||
+          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        thumbnail: thumbnail || targetAnime.banner || targetAnime.poster,
+        duration: duration || '24m',
+        airDate: airDate || new Date().toISOString().split('T')[0],
+        language: language || 'Japanese',
+        subtitle: subtitle || 'English',
+        isDubbed: Boolean(isDubbed),
+        isPublished: isPublished !== undefined ? Boolean(isPublished) : true,
+      };
+
+      if (!targetAnime.episodes) {
+        targetAnime.episodes = [];
+      }
+      targetAnime.episodes.push(newEpisode);
+      targetAnime.episodesCount = targetAnime.episodes.length;
+
+      await targetAnime.save();
+
       res.status(201).json({
         success: true,
-        message: 'Episode added successfully',
+        message: 'Episode added successfully to database',
         data: newEpisode,
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to add episode' });
+    } catch (err: any) {
+      console.error('[addEpisode Error]', err);
+      res.status(500).json({ success: false, message: 'Failed to add episode to database' });
     }
   },
 
   /**
    * PUT /api/episodes/:id
-   * Admin: Update episode
+   * Admin: Update episode in MongoDB
    */
   async updateEpisode(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
     const updates = req.body;
 
     try {
-      let updated = false;
-      let updatedEpisode: IEpisode | null = null;
+      await connectDB();
+      const animeDocs = await (Anime as any).find({ 'episodes.id': id });
 
-      try {
-        const animeDocs = await (Anime as any).find({ 'episodes.id': id });
-        for (const doc of animeDocs) {
-          const epIndex = doc.episodes.findIndex((e: any) => e.id === id);
-          if (epIndex !== -1) {
-            doc.episodes[epIndex] = { ...doc.episodes[epIndex].toObject(), ...updates };
-            await doc.save();
-            updatedEpisode = doc.episodes[epIndex];
-            updated = true;
-            break;
-          }
-        }
-      } catch {
-        // In-memory fallback
+      if (!animeDocs || animeDocs.length === 0) {
+        res.status(404).json({ success: false, message: 'Episode not found in database' });
+        return;
       }
 
-      for (const a of inMemoryAnimeList) {
-        if (!a.episodes) continue;
-        const epIndex = a.episodes.findIndex((e) => e.id === id);
+      let updatedEpisode: any = null;
+      for (const doc of animeDocs) {
+        const epIndex = doc.episodes.findIndex((e: any) => e.id === id);
         if (epIndex !== -1) {
-          a.episodes[epIndex] = { ...a.episodes[epIndex], ...updates };
-          updatedEpisode = a.episodes[epIndex];
-          updated = true;
+          const current = doc.episodes[epIndex].toObject
+            ? doc.episodes[epIndex].toObject()
+            : doc.episodes[epIndex];
+          doc.episodes[epIndex] = { ...current, ...updates };
+          await doc.save();
+          updatedEpisode = doc.episodes[epIndex];
           break;
         }
       }
 
-      if (!updated) {
-        res.status(404).json({ success: false, message: 'Episode not found' });
-        return;
-      }
-
       res.status(200).json({
         success: true,
-        message: 'Episode updated successfully',
+        message: 'Episode updated successfully in database',
         data: updatedEpisode,
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to update episode' });
+    } catch (err: any) {
+      console.error('[updateEpisode Error]', err);
+      res.status(500).json({ success: false, message: 'Failed to update episode in database' });
     }
   },
 
   /**
    * DELETE /api/episodes/:id
-   * Admin: Delete episode
+   * Admin: Delete episode from MongoDB
    */
   async deleteEpisode(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
 
     try {
-      let deleted = false;
+      await connectDB();
+      const animeDocs = await (Anime as any).find({ 'episodes.id': id });
 
-      try {
-        const animeDocs = await (Anime as any).find({ 'episodes.id': id });
-        for (const doc of animeDocs) {
-          const prevLen = doc.episodes.length;
-          doc.episodes = doc.episodes.filter((e: any) => e.id !== id);
-          if (doc.episodes.length < prevLen) {
-            doc.episodesCount = doc.episodes.length;
-            await doc.save();
-            deleted = true;
-            break;
-          }
-        }
-      } catch {
-        // In-memory fallback
+      if (!animeDocs || animeDocs.length === 0) {
+        res.status(404).json({ success: false, message: 'Episode not found in database' });
+        return;
       }
 
-      for (const a of inMemoryAnimeList) {
-        if (!a.episodes) continue;
-        const prevLen = a.episodes.length;
-        a.episodes = a.episodes.filter((e) => e.id !== id);
-        if (a.episodes.length < prevLen) {
-          a.episodesCount = a.episodes.length;
-          deleted = true;
+      for (const doc of animeDocs) {
+        const prevLen = doc.episodes.length;
+        doc.episodes = doc.episodes.filter((e: any) => e.id !== id);
+        if (doc.episodes.length < prevLen) {
+          doc.episodesCount = doc.episodes.length;
+          await doc.save();
           break;
         }
       }
 
-      if (!deleted) {
-        res.status(404).json({ success: false, message: 'Episode not found' });
-        return;
-      }
-
       res.status(200).json({
         success: true,
-        message: 'Episode deleted successfully',
+        message: 'Episode deleted successfully from database',
       });
-    } catch {
-      res.status(500).json({ success: false, message: 'Failed to delete episode' });
+    } catch (err: any) {
+      console.error('[deleteEpisode Error]', err);
+      res.status(500).json({ success: false, message: 'Failed to delete episode from database' });
     }
   },
 };

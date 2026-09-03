@@ -2,36 +2,42 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Video, IVideo } from '../models/Video.js';
 import { Anime } from '../models/Anime.js';
-import { inMemoryAnimeList } from './animeController.js';
 
 // In-memory fallback videos list
 export const inMemoryVideos: IVideo[] = [];
 
-// Seed sample videos from existing inMemoryAnimeList episodes
-export function seedInitialVideos(): void {
+// Seed sample videos from database episodes if needed
+export async function seedInitialVideos(): Promise<void> {
   if (inMemoryVideos.length > 0) return;
-  inMemoryAnimeList.forEach((anime) => {
-    if (Array.isArray(anime.episodes)) {
-      anime.episodes.forEach((ep) => {
-        inMemoryVideos.push({
-          id: `vid-${anime.id}-${ep.number}`,
-          animeId: anime.id,
-          animeTitle: anime.title,
-          episodeId: ep.id,
-          episodeNumber: ep.number,
-          videoUrl: ep.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          videoType: ep.videoUrl?.includes('.m3u8') ? 'HLS' : ep.videoUrl?.includes('embed') ? 'Embed' : 'MP4',
-          quality: '1080p',
-          language: ep.language || 'Japanese',
-          subDub: ep.isDubbed ? 'DUB' : 'SUB',
-          serverName: 'Server 1 (Primary - HD)',
-          status: 'Active',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as unknown as IVideo);
+  if (mongoose.connection.readyState === 1) {
+    try {
+      const animes = await (Anime as any).find({}).lean();
+      animes.forEach((anime: any) => {
+        if (Array.isArray(anime.episodes)) {
+          anime.episodes.forEach((ep: any) => {
+            inMemoryVideos.push({
+              id: `vid-${anime.id}-${ep.number}`,
+              animeId: anime.id,
+              animeTitle: anime.title,
+              episodeId: ep.id,
+              episodeNumber: ep.number,
+              videoUrl: ep.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+              videoType: ep.videoUrl?.includes('.m3u8') ? 'HLS' : ep.videoUrl?.includes('embed') ? 'Embed' : 'MP4',
+              quality: '1080p',
+              language: ep.language || 'Japanese',
+              subDub: ep.isDubbed ? 'DUB' : 'SUB',
+              serverName: 'Server 1 (Primary - HD)',
+              status: 'Active',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            } as unknown as IVideo);
+          });
+        }
       });
+    } catch {
+      // Ignored
     }
-  });
+  }
 }
 
 seedInitialVideos();
@@ -203,12 +209,6 @@ export const videoController = {
         }
       } catch {
         // Handled
-      }
-
-      const targetAnime = inMemoryAnimeList.find((a) => a.id === animeId);
-      if (targetAnime && Array.isArray(targetAnime.episodes)) {
-        const ep = targetAnime.episodes.find((e) => e.number === Number(episodeNumber));
-        if (ep) ep.videoUrl = videoUrl.trim();
       }
 
       res.status(201).json({

@@ -1,1 +1,1 @@
-mongodb://127.0.0.1:50292/animeflix
+mongodb://127.0.0.1:27017/animeflix

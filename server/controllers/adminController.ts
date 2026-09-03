@@ -4,7 +4,6 @@ import { Admin, IAdmin } from '../models/Admin.js';
 import { Anime } from '../models/Anime.js';
 import { hashValue, compareValue, signAdminToken } from '../utils/security.js';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
-import { inMemoryAnimeList } from './animeController.js';
 import { connectDB } from '../config/db.js';
 
 // In-memory fallback admin store when MongoDB server is offline
@@ -285,38 +284,21 @@ export const adminController = {
    */
   async getDashboardStats(_req: Request, res: Response): Promise<void> {
     try {
-      let totalAnime = 0;
-      let totalEpisodes = 0;
-      let publishedAnime = 0;
-      let draftAnime = 0;
+      await connectDB();
+      const [animeCount, draftCount, animeDocs] = await Promise.all([
+        (Anime as any).countDocuments(),
+        (Anime as any).countDocuments({ status: 'Draft' }),
+        (Anime as any).find({}, 'episodes episodesCount').lean(),
+      ]);
 
-      if (mongoose.connection.readyState === 1) {
-        try {
-          const [animeCount, draftCount, animeDocs] = await Promise.all([
-            (Anime as any).countDocuments(),
-            (Anime as any).countDocuments({ status: 'Draft' }),
-            (Anime as any).find({}, 'episodes episodesCount').lean(),
-          ]);
+      const totalAnime = Number(animeCount) || 0;
+      const draftAnime = Number(draftCount) || 0;
+      const publishedAnime = Math.max(0, totalAnime - draftAnime);
 
-          totalAnime = Number(animeCount) || 0;
-          draftAnime = Number(draftCount) || 0;
-          publishedAnime = Math.max(0, totalAnime - draftAnime);
-
-          totalEpisodes = (animeDocs as any[]).reduce((sum, doc) => {
-            const epLen = Array.isArray(doc.episodes) ? doc.episodes.length : 0;
-            return sum + Math.max(epLen, doc.episodesCount || 0);
-          }, 0);
-        } catch {
-          // Fall back to in-memory count
-        }
-      }
-
-      if (totalAnime === 0) {
-        totalAnime = inMemoryAnimeList.length;
-        draftAnime = inMemoryAnimeList.filter((a) => (a as any).status === 'Draft').length;
-        publishedAnime = totalAnime - draftAnime;
-        totalEpisodes = inMemoryAnimeList.reduce((sum, a) => sum + (a.episodes?.length || a.episodesCount || 0), 0);
-      }
+      const totalEpisodes = (animeDocs as any[]).reduce((sum, doc) => {
+        const epLen = Array.isArray(doc.episodes) ? doc.episodes.length : 0;
+        return sum + Math.max(epLen, doc.episodesCount || 0);
+      }, 0);
 
       res.status(200).json({
         success: true,
@@ -325,14 +307,11 @@ export const adminController = {
         publishedAnime,
         draftAnime,
       });
-    } catch {
+    } catch (err: any) {
+      console.error('[Dashboard Stats Error]', err);
       res.status(500).json({
         success: false,
-        message: 'Failed to retrieve dashboard stats',
-        totalAnime: 0,
-        totalEpisodes: 0,
-        publishedAnime: 0,
-        draftAnime: 0,
+        message: 'Database error: Failed to retrieve dashboard stats from MongoDB',
       });
     }
   },

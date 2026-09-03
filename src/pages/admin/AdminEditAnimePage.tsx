@@ -150,13 +150,20 @@ export const AdminEditAnimePage: React.FC = () => {
       const targetId = (originalAnime as any)?._id ? String((originalAnime as any)._id) : (originalAnime?.id || id);
       console.log(`[Admin Edit] Updating anime with ID: ${targetId}`);
       const res = await animeService.updateAnime(targetId, updates);
-      if (res.success) {
+      if (res.success && (res.data || res.anime)) {
+        const verified = await animeService.getAnimeById(targetId).catch(() => null);
+        if (!verified) {
+          setErrorMessage('Database verification warning: Updated anime could not be confirmed in MongoDB.');
+          setIsSubmitting(false);
+          return;
+        }
+
         navigate('/admin/anime', {
           replace: true,
-          state: { successMessage: 'Anime updated successfully.' },
+          state: { successMessage: `Anime "${verified.title}" updated and verified in database successfully.` },
         });
       } else {
-        setErrorMessage(res.message || 'Failed to update anime.');
+        setErrorMessage(res.message || 'Failed to update anime in database.');
         setIsSubmitting(false);
       }
     } catch {

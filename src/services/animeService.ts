@@ -1,18 +1,9 @@
 import { apiClient } from './apiConfig';
 import { Anime, Episode } from '../types/anime';
-import { DEMO_ANIME } from '../utils/animeData';
-
-// Helper to keep local DEMO_ANIME synchronized
-function syncLocalCatalog(updatedList: Anime[]) {
-  if (Array.isArray(updatedList) && updatedList.length > 0) {
-    DEMO_ANIME.length = 0;
-    updatedList.forEach((a) => DEMO_ANIME.push(a));
-  }
-}
 
 export const animeService = {
   /**
-   * Fetch all anime with optional filters
+   * Fetch all anime with optional filters from the MongoDB backend
    */
   async getAllAnime(params?: {
     search?: string;
@@ -32,16 +23,15 @@ export const animeService = {
         else if (Array.isArray(raw.anime)) list = raw.anime;
         else if (Array.isArray(raw.results)) list = raw.results;
       }
-      syncLocalCatalog(list);
       return list;
-    } catch (err) {
-      console.error('[animeService.getAllAnime] Error fetching anime from server:', err);
+    } catch (err: any) {
+      console.error('[animeService.getAllAnime] Error retrieving anime from server:', err);
       throw err;
     }
   },
 
   /**
-   * Fetch single anime by ID or slug
+   * Fetch single anime by ID or slug directly from MongoDB backend
    */
   async getAnimeById(id: string): Promise<Anime | null> {
     try {
@@ -53,19 +43,22 @@ export const animeService = {
         else if (raw.anime && typeof raw.anime === 'object' && !Array.isArray(raw.anime)) item = raw.anime;
         else if (raw.id || raw._id || raw.title) item = raw;
       }
-      if (item) {
-        return item;
+      return item;
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        return null;
       }
-    } catch (err) {
-      console.warn('[animeService.getAnimeById] Error fetching anime from server:', err);
+      console.error('[animeService.getAnimeById] Error fetching anime from server:', err);
+      throw err;
     }
-    return DEMO_ANIME.find((a) => a.id === id || a.slug === id || (a as any)._id === id) || null;
   },
 
   /**
-   * Admin: Add new anime
+   * Admin: Add new anime directly into database
    */
-  async createAnime(animeData: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
+  async createAnime(
+    animeData: Partial<Anime> & { [key: string]: any }
+  ): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
     try {
       const response = await apiClient.post<any>('/api/anime', animeData);
       const raw = response?.data;
@@ -76,58 +69,66 @@ export const animeService = {
         else if (raw.id || raw._id || raw.title) created = raw;
       }
       if (created) {
-        const exists = DEMO_ANIME.some((a) => a.id === created!.id || ((a as any)._id && (a as any)._id === (created as any)._id));
-        if (!exists) {
-          DEMO_ANIME.unshift(created);
-        }
-        return { success: true, data: created, anime: created, message: raw?.message || 'Anime created successfully.' };
+        return {
+          success: true,
+          data: created,
+          anime: created,
+          message: raw?.message || 'Anime created successfully in database.',
+        };
       }
       return { success: false, message: raw?.message || 'Failed to create anime.' };
     } catch (err: any) {
-      if (err.response?.data?.message) {
-        return { success: false, message: err.response.data.message };
-      }
-      return { success: false, message: 'Server error: Failed to add anime to database.' };
+      console.error('[animeService.createAnime] Server error:', err);
+      const msg = err.response?.data?.message || err.message || 'Database error: Failed to add anime';
+      return { success: false, message: msg };
     }
   },
 
   /**
-   * Admin: Update anime
+   * Admin: Update anime in database
    */
-  async updateAnime(id: string, updates: Partial<Anime> & { [key: string]: any }): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
+  async updateAnime(
+    id: string,
+    updates: Partial<Anime> & { [key: string]: any }
+  ): Promise<{ success: boolean; data?: Anime; anime?: Anime; message?: string }> {
     try {
-      const response = await apiClient.put<{ success: boolean; data?: Anime; anime?: Anime; message: string }>(`/api/anime/${id}`, updates);
-      if (response.data && response.data.success && (response.data.data || response.data.anime)) {
-        const updated = (response.data.data || response.data.anime)!;
-        const index = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id || (a as any)._id === id);
-        if (index !== -1) {
-          DEMO_ANIME[index] = { ...DEMO_ANIME[index], ...updated };
-        }
-        return { success: true, data: updated, anime: updated, message: response.data.message || 'Anime updated successfully.' };
+      const response = await apiClient.put<any>(`/api/anime/${id}`, updates);
+      const raw = response?.data;
+      let updated: Anime | null = null;
+      if (raw && typeof raw === 'object') {
+        if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) updated = raw.data;
+        else if (raw.anime && typeof raw.anime === 'object' && !Array.isArray(raw.anime)) updated = raw.anime;
+        else if (raw.id || raw._id || raw.title) updated = raw;
       }
-      return { success: false, message: response.data?.message || 'Failed to update anime.' };
+      if (updated) {
+        return {
+          success: true,
+          data: updated,
+          anime: updated,
+          message: raw?.message || 'Anime updated successfully in database.',
+        };
+      }
+      return { success: false, message: raw?.message || 'Failed to update anime.' };
     } catch (err: any) {
-      if (err.response?.data?.message) {
-        return { success: false, message: err.response.data.message };
-      }
-      return { success: false, message: 'Server error: Failed to update anime.' };
+      console.error('[animeService.updateAnime] Server error:', err);
+      const msg = err.response?.data?.message || err.message || 'Database error: Failed to update anime';
+      return { success: false, message: msg };
     }
   },
 
   /**
-   * Admin: Delete anime
+   * Admin: Delete anime from database
    */
   async deleteAnime(id: string): Promise<{ success: boolean; message?: string }> {
     try {
       const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/anime/${id}`);
       if (response.data && response.data.success) {
-        const idx = DEMO_ANIME.findIndex((a) => a.id === id || a.slug === id || (a as any)._id === id);
-        if (idx !== -1) DEMO_ANIME.splice(idx, 1);
         return { success: true, message: response.data.message || 'Anime deleted successfully.' };
       }
       return { success: false, message: response.data?.message || 'Unable to delete anime.' };
     } catch (err: any) {
-      const errMsg = err.response?.data?.message || err.response?.data?.error || err.message || 'Unable to delete anime.';
+      const errMsg =
+        err.response?.data?.message || err.response?.data?.error || err.message || 'Unable to delete anime from database.';
       return { success: false, message: errMsg };
     }
   },
@@ -140,103 +141,59 @@ export const animeService = {
       const response = await apiClient.get<{ success: boolean; data: any[] }>('/api/episodes', {
         params: { animeId },
       });
-      if (response.data.success && Array.isArray(response.data.data)) {
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
         return response.data.data;
       }
-    } catch {
-      // Fallback to local
+      return [];
+    } catch (err) {
+      console.error('[animeService.getAllEpisodes] Error:', err);
+      throw err;
     }
-
-    const eps: Array<Episode & { animeId: string; animeTitle: string }> = [];
-    DEMO_ANIME.forEach((a) => {
-      if (animeId && a.id !== animeId && a.slug !== animeId) return;
-      if (Array.isArray(a.episodes)) {
-        a.episodes.forEach((ep) => {
-          eps.push({
-            ...ep,
-            animeId: a.id,
-            animeTitle: a.title,
-          });
-        });
-      }
-    });
-    return eps;
   },
 
   /**
    * Admin: Add episode to anime
    */
-  async addEpisode(animeId: string, episodeData: Partial<Episode> & { [key: string]: any }): Promise<{ success: boolean; data?: Episode; message?: string }> {
+  async addEpisode(
+    animeId: string,
+    episodeData: Partial<Episode> & { [key: string]: any }
+  ): Promise<{ success: boolean; data?: Episode; message?: string }> {
     try {
       const response = await apiClient.post<{ success: boolean; data: Episode; message: string }>('/api/episodes', {
         animeId,
         ...episodeData,
       });
-      if (response.data.success && response.data.data) {
-        const ep = response.data.data;
-        const target = DEMO_ANIME.find((a) => a.id === animeId || a.slug === animeId);
-        if (target) {
-          if (!target.episodes) target.episodes = [];
-          target.episodes.push(ep);
-          target.episodesCount = target.episodes.length;
-        }
-        return { success: true, data: ep, message: response.data.message };
+      if (response.data && response.data.success && response.data.data) {
+        return { success: true, data: response.data.data, message: response.data.message };
       }
-    } catch {
-      // Fallback
-    }
-
-    const target = DEMO_ANIME.find((a) => a.id === animeId || a.slug === animeId);
-    if (target) {
-      if (!target.episodes) target.episodes = [];
-      const newEp: Episode = {
-        id: episodeData.id || `${animeId}-ep-${episodeData.number || target.episodes.length + 1}`,
-        number: Number(episodeData.number) || target.episodes.length + 1,
-        title: episodeData.title || `Episode ${episodeData.number || target.episodes.length + 1}`,
-        thumbnail: episodeData.thumbnail || target.banner,
-        duration: episodeData.duration || '24m',
-        airDate: episodeData.airDate || new Date().toISOString().split('T')[0],
-        description: episodeData.description || `Episode ${episodeData.number || 1} of ${target.title}.`,
+      return { success: false, message: response.data?.message || 'Failed to add episode' };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Database error: Failed to add episode',
       };
-      target.episodes.push(newEp);
-      target.episodesCount = target.episodes.length;
-      return { success: true, data: newEp, message: 'Episode added successfully.' };
     }
-
-    return { success: false, message: 'Target anime not found.' };
   },
 
   /**
    * Admin: Update episode
    */
-  async updateEpisode(episodeId: string, updates: Partial<Episode> & { [key: string]: any }): Promise<{ success: boolean; message?: string }> {
+  async updateEpisode(
+    episodeId: string,
+    updates: Partial<Episode> & { [key: string]: any }
+  ): Promise<{ success: boolean; message?: string }> {
     try {
       const response = await apiClient.put<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`, updates);
-      if (response.data.success) {
-        for (const a of DEMO_ANIME) {
-          if (!a.episodes) continue;
-          const idx = a.episodes.findIndex((e) => e.id === episodeId);
-          if (idx !== -1) {
-            a.episodes[idx] = { ...a.episodes[idx], ...updates };
-            break;
-          }
-        }
+      if (response.data && response.data.success) {
         return { success: true, message: response.data.message };
       }
-    } catch {
-      // Fallback
+      return { success: false, message: response.data?.message || 'Failed to update episode' };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Database error: Failed to update episode',
+      };
     }
-
-    for (const a of DEMO_ANIME) {
-      if (!a.episodes) continue;
-      const idx = a.episodes.findIndex((e) => e.id === episodeId);
-      if (idx !== -1) {
-        a.episodes[idx] = { ...a.episodes[idx], ...updates };
-        return { success: true, message: 'Episode updated successfully.' };
-      }
-    }
-
-    return { success: false, message: 'Episode not found.' };
   },
 
   /**
@@ -245,32 +202,15 @@ export const animeService = {
   async deleteEpisode(episodeId: string): Promise<{ success: boolean; message?: string }> {
     try {
       const response = await apiClient.delete<{ success: boolean; message: string }>(`/api/episodes/${episodeId}`);
-      if (response.data.success) {
-        for (const a of DEMO_ANIME) {
-          if (!a.episodes) continue;
-          const idx = a.episodes.findIndex((e) => e.id === episodeId);
-          if (idx !== -1) {
-            a.episodes.splice(idx, 1);
-            a.episodesCount = a.episodes.length;
-            break;
-          }
-        }
+      if (response.data && response.data.success) {
         return { success: true, message: response.data.message };
       }
-    } catch {
-      // Fallback
+      return { success: false, message: response.data?.message || 'Failed to delete episode' };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Database error: Failed to delete episode',
+      };
     }
-
-    for (const a of DEMO_ANIME) {
-      if (!a.episodes) continue;
-      const idx = a.episodes.findIndex((e) => e.id === episodeId);
-      if (idx !== -1) {
-        a.episodes.splice(idx, 1);
-        a.episodesCount = a.episodes.length;
-        return { success: true, message: 'Episode deleted successfully.' };
-      }
-    }
-
-    return { success: false, message: 'Episode not found.' };
   },
 };

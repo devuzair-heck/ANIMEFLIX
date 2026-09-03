@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Episode, IEpisodeDoc } from '../models/Episode.js';
 import { Anime } from '../models/Anime.js';
-import { inMemoryAnimeList } from './animeController.js';
 
 // In-memory episode store for offline / fallback mode
 export const inMemoryEpisodeList: Array<{
@@ -27,42 +26,6 @@ export const inMemoryEpisodeList: Array<{
   createdAt: Date;
   updatedAt: Date;
 }> = [];
-
-// Initialize inMemoryEpisodeList from inMemoryAnimeList if available
-function syncInMemoryEpisodes() {
-  if (inMemoryEpisodeList.length === 0 && inMemoryAnimeList.length > 0) {
-    for (const anime of inMemoryAnimeList) {
-      if (Array.isArray(anime.episodes)) {
-        for (const ep of anime.episodes) {
-          inMemoryEpisodeList.push({
-            id: ep.id || `${anime.id}-ep-${ep.number}`,
-            animeId: anime.id,
-            animeTitle: anime.title,
-            seasonNumber: (ep as any).seasonNumber || 1,
-            episodeNumber: (ep as any).episodeNumber || ep.number || 1,
-            number: ep.number || (ep as any).episodeNumber || 1,
-            title: ep.title || `Episode ${ep.number}`,
-            description: ep.description || '',
-            thumbnail: ep.thumbnail || anime.banner || anime.poster || '',
-            videoUrl: ep.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            duration: ep.duration || '24:00',
-            releaseDate: ep.airDate || new Date().toISOString().split('T')[0],
-            airDate: ep.airDate || new Date().toISOString().split('T')[0],
-            isPublished: ep.isPublished !== undefined ? Boolean(ep.isPublished) : true,
-            isDubbed: Boolean(ep.isDubbed),
-            language: ep.language || 'Japanese',
-            subtitle: ep.subtitle || 'English',
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-      }
-    }
-  }
-}
-
-// Sync on startup
-syncInMemoryEpisodes();
 
 export const episodeController = {
   /**
@@ -141,7 +104,6 @@ export const episodeController = {
 
       // If episodes still empty or DB offline, use in-memory store
       if (episodes.length === 0) {
-        syncInMemoryEpisodes();
         episodes = inMemoryEpisodeList.filter((ep) => {
           if (animeId && animeId !== 'all' && ep.animeId !== animeId) return false;
           const sNum = Number(seasonNumber || season);
@@ -239,7 +201,6 @@ export const episodeController = {
       }
 
       if (episodes.length === 0) {
-        syncInMemoryEpisodes();
         episodes = inMemoryEpisodeList.filter((e) => e.animeId === cleanAnimeId);
       }
 
@@ -384,10 +345,7 @@ export const episodeController = {
       }
 
       if (!parentAnimeDoc) {
-        const memAnime = inMemoryAnimeList.find((a) => a.id === cleanAnimeId || a.slug === cleanAnimeId);
-        if (memAnime) {
-          parentAnimeTitle = memAnime.title;
-        }
+        parentAnimeTitle = cleanAnimeId;
       }
 
       // 3. Prevent duplicate episodes inside the same Anime and Season
@@ -479,13 +437,6 @@ export const episodeController = {
         updatedAt: new Date(),
       };
       inMemoryEpisodeList.push(inMemEp);
-
-      const memParentAnime = inMemoryAnimeList.find((a) => a.id === cleanAnimeId || a.slug === cleanAnimeId);
-      if (memParentAnime) {
-        if (!memParentAnime.episodes) memParentAnime.episodes = [];
-        memParentAnime.episodes.push(newEpisodeData as any);
-        memParentAnime.episodesCount = memParentAnime.episodes.length;
-      }
 
       res.status(201).json({
         success: true,
@@ -638,16 +589,6 @@ export const episodeController = {
         updated = true;
       }
 
-      // Also update in-memory anime list embedded episodes
-      for (const a of inMemoryAnimeList) {
-        if (!Array.isArray(a.episodes)) continue;
-        const eIdx = a.episodes.findIndex((e) => e.id === cleanId);
-        if (eIdx !== -1) {
-          a.episodes[eIdx] = { ...a.episodes[eIdx], ...updates };
-          break;
-        }
-      }
-
       if (!updated) {
         res.status(404).json({ success: false, message: 'Episode not found' });
         return;
@@ -725,16 +666,6 @@ export const episodeController = {
       if (memIdx !== -1) {
         inMemoryEpisodeList.splice(memIdx, 1);
         deleted = true;
-      }
-
-      for (const a of inMemoryAnimeList) {
-        if (!Array.isArray(a.episodes)) continue;
-        const prevCount = a.episodes.length;
-        a.episodes = a.episodes.filter((e) => e.id !== cleanId);
-        if (a.episodes.length !== prevCount) {
-          a.episodesCount = a.episodes.length;
-          deleted = true;
-        }
       }
 
       if (!deleted) {

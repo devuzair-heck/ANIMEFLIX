@@ -1,26 +1,79 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Flame, Star, Clock, Sparkles, Trophy, Grid } from 'lucide-react';
-import { DEMO_ANIME, GENRES_LIST } from '../utils/animeData';
+import { Flame, Star, Clock, Sparkles, Trophy, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { GENRES_LIST } from '../utils/animeData';
 import { HeroSlider } from '../components/HeroSlider';
 import { AnimeRow } from '../components/AnimeRow';
+import { animeService } from '../services/animeService';
+import { Anime } from '../types/anime';
 
 export const Home: React.FC = () => {
-  const trendingAnime = DEMO_ANIME.filter((a) => a.isTrending);
-  const popularAnime = DEMO_ANIME.filter((a) => a.isPopular);
-  const recentlyAdded = DEMO_ANIME.filter((a) => a.isRecentlyAdded);
-  const topRated = DEMO_ANIME.filter((a) => a.isTopRated);
-  const latestEpisodes = DEMO_ANIME.slice(0, 8);
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await animeService.getAllAnime();
+      setAnimeList(data);
+    } catch (err: any) {
+      console.error('[Home Page Error] Failed to retrieve anime catalog:', err);
+      setError('Unable to load anime catalog from database. Please check your connection and try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#080808] text-white flex flex-col items-center justify-center p-8">
+        <Loader2 className="w-10 h-10 text-[#DC143C] animate-spin mb-4" />
+        <p className="text-sm font-semibold tracking-wider uppercase text-neutral-400">
+          Loading anime catalog from database...
+        </p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#080808] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-red-950/60 border border-red-500/30 flex items-center justify-center text-red-400 mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-black uppercase italic mb-2">Connection Error</h2>
+        <p className="text-sm text-neutral-400 max-w-md mb-6">{error}</p>
+        <button
+          type="button"
+          onClick={loadData}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#DC143C] hover:bg-[#b01030] text-white text-xs font-black uppercase tracking-wider transition-colors shadow-lg"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Retry Loading</span>
+        </button>
+      </div>
+    );
+  }
+
+  const trendingAnime = animeList.filter((a) => a.isTrending);
+  const popularAnime = animeList.filter((a) => a.isPopular);
+  const recentlyAdded = animeList.filter((a) => a.isRecentlyAdded);
+  const topRated = animeList.filter((a) => a.isTopRated);
+  const latestEpisodes = animeList.slice(0, 8);
 
   return (
     <div className="min-h-screen bg-[#080808] text-white">
-      
-      {/* Hero Section */}
-      <HeroSlider animeList={DEMO_ANIME} />
+      {/* Hero Section with live database documents */}
+      <HeroSlider animeList={animeList} />
 
       {/* Main Content Rows */}
       <main className="relative z-20 -mt-6">
-        
         {/* Trending Anime Row */}
         <AnimeRow
           title="Trending Now"
@@ -96,9 +149,7 @@ export const Home: React.FC = () => {
           animeList={topRated}
           viewAllLink="/browse"
         />
-
       </main>
-
     </div>
   );
 };
