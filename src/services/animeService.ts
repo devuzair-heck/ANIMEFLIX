@@ -25,8 +25,29 @@ export const animeService = {
       }
       return list;
     } catch (err: any) {
-      console.error('[animeService.getAllAnime] Error retrieving anime from server:', err);
-      throw err;
+      console.warn('[animeService.getAllAnime] Initial fetch notice, retrying in 400ms...', err);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const retryResponse = await apiClient.get<any>('/api/anime', { params });
+        const raw = retryResponse?.data;
+        let list: Anime[] = [];
+        if (Array.isArray(raw)) {
+          list = raw;
+        } else if (raw && typeof raw === 'object') {
+          if (Array.isArray(raw.data)) list = raw.data;
+          else if (Array.isArray(raw.anime)) list = raw.anime;
+          else if (Array.isArray(raw.results)) list = raw.results;
+        }
+        return list;
+      } catch (retryErr: any) {
+        console.error('[animeService.getAllAnime] Error retrieving anime from server:', retryErr);
+        try {
+          const { DEMO_ANIME } = await import('../utils/animeData');
+          return DEMO_ANIME;
+        } catch {
+          return [];
+        }
+      }
     }
   },
 
@@ -48,8 +69,30 @@ export const animeService = {
       if (err.response?.status === 404) {
         return null;
       }
-      console.error('[animeService.getAnimeById] Error fetching anime from server:', err);
-      throw err;
+      console.warn('[animeService.getAnimeById] Initial fetch notice, retrying in 400ms...', err);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const response = await apiClient.get<any>(`/api/anime/${id}`);
+        const raw = response?.data;
+        let item: Anime | null = null;
+        if (raw && typeof raw === 'object') {
+          if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) item = raw.data;
+          else if (raw.anime && typeof raw.anime === 'object' && !Array.isArray(raw.anime)) item = raw.anime;
+          else if (raw.id || raw._id || raw.title) item = raw;
+        }
+        return item;
+      } catch (retryErr: any) {
+        if (retryErr.response?.status === 404) {
+          return null;
+        }
+        try {
+          const { DEMO_ANIME } = await import('../utils/animeData');
+          const fallback = DEMO_ANIME.find((a) => a.id === id || a.slug === id);
+          if (fallback) return fallback;
+        } catch {}
+        console.error('[animeService.getAnimeById] Error fetching anime from server:', retryErr);
+        throw retryErr;
+      }
     }
   },
 

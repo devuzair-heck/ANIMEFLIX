@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, ArrowRight, Sparkles } from 'lucide-react';
-import { DEMO_ANIME, GENRES_LIST } from '../utils/animeData';
+import { Layers, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
+import { GENRES_LIST } from '../utils/animeData';
+import { animeService } from '../services/animeService';
+import { Anime } from '../types/anime';
 
 // Background images for genre cards
 const GENRE_IMAGES: Record<string, string> = {
@@ -25,6 +27,26 @@ const GENRE_IMAGES: Record<string, string> = {
 
 export const Genres: React.FC = () => {
   const navigate = useNavigate();
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCatalog() {
+      try {
+        const data = await animeService.getAllAnime();
+        if (isMounted) setAnimeList(data);
+      } catch {
+        // Handled
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadCatalog();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleGenreClick = (genre: string) => {
     navigate(`/browse?genre=${encodeURIComponent(genre)}`);
@@ -52,8 +74,8 @@ export const Genres: React.FC = () => {
         {/* Genre Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
           {GENRES_LIST.map((genre) => {
-            const count = DEMO_ANIME.filter((a) =>
-              a.genres.some((g) => g.toLowerCase() === genre.toLowerCase())
+            const count = animeList.filter((a) =>
+              a.genres?.some((g) => g.toLowerCase() === genre.toLowerCase())
             ).length;
 
             const bgImage = GENRE_IMAGES[genre] || GENRE_IMAGES.Action;

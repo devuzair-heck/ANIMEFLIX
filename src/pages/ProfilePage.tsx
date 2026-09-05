@@ -1,12 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { User, Tv, Clock, Heart, Award, Settings, ShieldCheck, Play, ArrowUpRight } from 'lucide-react';
-import { DEMO_ANIME } from '../utils/animeData';
+import { animeService } from '../services/animeService';
+import { Anime } from '../types/anime';
 import { useWatchlist } from '../context/WatchlistContext';
 
 export const ProfilePage: React.FC = () => {
   const { watchlist } = useWatchlist();
-  const watchHistory = DEMO_ANIME.slice(0, 3);
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const data = await animeService.getAllAnime();
+        if (isMounted) setAnimeList(data);
+      } catch {
+        // Handled
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const watchHistory = animeList.slice(0, 3);
 
   return (
     <div className="min-h-screen bg-[#080808] pt-24 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">

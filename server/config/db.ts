@@ -7,6 +7,7 @@ import net from 'net';
 // Cached connection for serverless / container environments
 let cachedConnection: typeof mongoose | null = null;
 let connectionPromise: Promise<typeof mongoose> | null = null;
+let externalCloudFailed = false;
 
 function checkPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -69,15 +70,22 @@ export async function connectDB(): Promise<typeof mongoose> {
     const mongoUri = process.env.MONGO_URI;
 
     // 1. If explicit external cloud MongoDB URI is configured (e.g. Vercel Atlas connection)
-    if (mongoUri && !mongoUri.includes('127.0.0.1') && !mongoUri.includes('localhost')) {
+    if (
+      !externalCloudFailed &&
+      mongoUri &&
+      !mongoUri.includes('127.0.0.1') &&
+      !mongoUri.includes('localhost')
+    ) {
       try {
-        const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+        const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 2000 });
         console.log('[Database] Connected to external cloud MongoDB URI:', mongoUri.replace(/\/\/.*@/, '//***@'));
         console.log(`[Database] Database: ${conn.connection.db?.databaseName || 'animeflix'}`);
         cachedConnection = conn;
         return conn;
       } catch (err) {
-        console.warn('[Database] External cloud MongoDB connection failed:', err);
+        externalCloudFailed = true;
+        console.warn('[Database] External cloud MongoDB connection failed, falling back to local persistent daemon:', err);
+        await mongoose.disconnect().catch(() => {});
       }
     }
 

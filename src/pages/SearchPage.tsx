@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search as SearchIcon, RotateCcw } from 'lucide-react';
-import { DEMO_ANIME } from '../utils/animeData';
+import { Search as SearchIcon, RotateCcw, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { animeService } from '../services/animeService';
+import { Anime } from '../types/anime';
 import { SearchBar } from '../components/SearchBar';
 import { AnimeCard } from '../components/AnimeCard';
 import { EmptyState } from '../components/EmptyState';
@@ -22,6 +23,27 @@ const SEARCH_CHIPS = [
 export const SearchPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
+  const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await animeService.getAllAnime();
+      setAnimeList(data);
+    } catch (err: any) {
+      console.error('[SearchPage Error] Failed to load anime catalog:', err);
+      setError('Unable to load anime catalog from database.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleQueryChange = (newQuery: string) => {
     if (newQuery) {
@@ -41,18 +63,18 @@ export const SearchPage: React.FC = () => {
 
   // Filter search results
   const results = useMemo(() => {
-    if (!query.trim()) return DEMO_ANIME;
+    if (!query.trim()) return animeList;
 
     const q = query.toLowerCase().trim();
-    return DEMO_ANIME.filter((anime) => {
-      const titleMatch = anime.title.toLowerCase().includes(q) || anime.japaneseTitle.toLowerCase().includes(q);
-      const genreMatch = anime.genres.some((g) => g.toLowerCase().includes(q));
-      const descMatch = anime.description.toLowerCase().includes(q);
-      const studioMatch = anime.studio.toLowerCase().includes(q);
-      const typeMatch = anime.type.toLowerCase().includes(q);
-      return titleMatch || genreMatch || descMatch || studioMatch || typeMatch;
+    return animeList.filter((anime) => {
+      const titleMatch = anime.title?.toLowerCase().includes(q) || anime.japaneseTitle?.toLowerCase().includes(q);
+      const genreMatch = anime.genres?.some((g) => g.toLowerCase().includes(q));
+      const descMatch = anime.description?.toLowerCase().includes(q);
+      const studioMatch = anime.studio?.toLowerCase().includes(q);
+      const typeMatch = anime.type?.toLowerCase().includes(q);
+      return Boolean(titleMatch || genreMatch || descMatch || studioMatch || typeMatch);
     });
-  }, [query]);
+  }, [animeList, query]);
 
   return (
     <div className="min-h-screen bg-[#080808] text-white pt-24 pb-20">
@@ -126,7 +148,25 @@ export const SearchPage: React.FC = () => {
         </div>
 
         {/* Results Grid / Empty State */}
-        {results.length === 0 ? (
+        {isLoading ? (
+          <div className="py-20 flex flex-col items-center justify-center text-center">
+            <Loader2 className="w-8 h-8 text-[#DC143C] animate-spin mb-3" />
+            <p className="text-xs font-bold uppercase tracking-wider text-neutral-400">Searching database catalog...</p>
+          </div>
+        ) : error ? (
+          <div className="p-8 rounded-2xl bg-red-950/40 border border-red-500/30 text-center flex flex-col items-center max-w-md mx-auto my-8">
+            <AlertCircle className="w-10 h-10 text-red-400 mb-2" />
+            <h3 className="text-base font-bold text-white mb-1">Catalog Connection Error</h3>
+            <p className="text-xs text-neutral-400 mb-4">{error}</p>
+            <button
+              onClick={loadData}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#DC143C] hover:bg-[#b01030] text-white text-xs font-bold uppercase transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        ) : results.length === 0 ? (
           <EmptyState
             title="No Anime Found"
             message={`We couldn't find any anime matching "${query}". Try searching for another title, genre, or keyword.`}

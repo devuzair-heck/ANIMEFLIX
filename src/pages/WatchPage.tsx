@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Play,
-  Pause,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
   Server,
   MessageSquare,
   Send,
-  ListFilter
+  ListFilter,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { DEMO_ANIME } from '../utils/animeData';
 import { animeService } from '../services/animeService';
 import { videoService } from '../services/videoService';
-import { Anime, VideoStream } from '../types/anime';
+import { Anime, Episode, VideoStream } from '../types/anime';
 import { Breadcrumbs } from '../components/Breadcrumbs';
 import { AnimeImage } from '../components/AnimeImage';
 
@@ -22,7 +22,9 @@ export const WatchPage: React.FC = () => {
   const { animeId, episodeId } = useParams<{ animeId: string; episodeId: string }>();
   const navigate = useNavigate();
 
-  const [anime, setAnime] = useState<Anime | null>(() => DEMO_ANIME.find((a) => a.id === animeId || a.slug === animeId) || null);
+  const [anime, setAnime] = useState<Anime | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoStreams, setVideoStreams] = useState<VideoStream[]>([]);
   const [activeServer, setActiveServer] = useState('Server 1 (Primary - HD)');
@@ -33,30 +35,42 @@ export const WatchPage: React.FC = () => {
     { id: '2', user: 'OtakuGirl', text: 'The plot twist at the end left me speechless.', time: '5 hours ago' }
   ]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchAnimeData() {
-      if (!animeId) return;
-      try {
-        const found = await animeService.getAnimeById(animeId);
-        if (isMounted && found) {
-          setAnime(found);
-        }
-      } catch {
-        // Handled
-      }
+  const loadAnimeData = async () => {
+    if (!animeId) return;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const found = await animeService.getAnimeById(animeId);
+      setAnime(found);
+    } catch (err: any) {
+      console.error('[WatchPage Error] Failed to fetch anime:', err);
+      setLoadError('Failed to load anime from database.');
+    } finally {
+      setIsLoading(false);
     }
-    fetchAnimeData();
-    return () => {
-      isMounted = false;
-    };
+  };
+
+  useEffect(() => {
+    loadAnimeData();
   }, [animeId]);
 
-  const currentEpisodeIndex = anime?.episodes
-    ? anime.episodes.findIndex((ep) => ep.id === episodeId || ep.number.toString() === episodeId)
+  // Locate the target episode or fallback to the first available episode
+  const currentEpisodeIndex = anime?.episodes && anime.episodes.length > 0
+    ? (() => {
+        const idx = anime.episodes.findIndex(
+          (ep) =>
+            ep.id === episodeId ||
+            (ep as any)._id === episodeId ||
+            ep.number.toString() === episodeId
+        );
+        return idx !== -1 ? idx : 0;
+      })()
     : -1;
 
-  const currentEpisode = anime && currentEpisodeIndex !== -1 ? anime.episodes[currentEpisodeIndex] : null;
+  const currentEpisode: Episode | null =
+    anime && currentEpisodeIndex !== -1 && anime.episodes
+      ? anime.episodes[currentEpisodeIndex]
+      : null;
 
   useEffect(() => {
     let isMounted = true;
@@ -64,8 +78,8 @@ export const WatchPage: React.FC = () => {
       if (!anime || !currentEpisode) return;
       try {
         const streams = await videoService.getAllVideos({
-          animeId: anime.id,
-          episodeId: currentEpisode.id,
+          animeId: (anime as any)._id || anime.id,
+          episodeId: (currentEpisode as any)._id || currentEpisode.id,
         });
         if (isMounted) {
           setVideoStreams(streams);
@@ -82,6 +96,36 @@ export const WatchPage: React.FC = () => {
       isMounted = false;
     };
   }, [anime?.id, currentEpisode?.id]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#080808] text-white pt-28 pb-20 flex flex-col items-center justify-center px-4 text-center">
+        <Loader2 className="w-10 h-10 text-[#DC143C] animate-spin mb-4" />
+        <p className="text-xs font-bold uppercase tracking-widest text-neutral-400">
+          Loading stream from database...
+        </p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-[#080808] text-white pt-28 pb-20 flex flex-col items-center justify-center px-4 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-red-950/60 border border-red-500/30 flex items-center justify-center text-red-400 mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-black uppercase italic mb-2">Connection Error</h2>
+        <p className="text-sm text-neutral-400 max-w-md mb-6">{loadError}</p>
+        <button
+          onClick={loadAnimeData}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#DC143C] hover:bg-[#b01030] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-lg"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Retry</span>
+        </button>
+      </div>
+    );
+  }
 
   // Error state if invalid anime or episode
   if (!anime || !currentEpisode) {
