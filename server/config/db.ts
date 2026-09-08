@@ -7,7 +7,16 @@ import net from 'net';
 // Cached connection for serverless / container environments
 let cachedConnection: typeof mongoose | null = null;
 let connectionPromise: Promise<typeof mongoose> | null = null;
-let externalCloudFailed = false;
+
+function sanitizeUri(uri?: string): string {
+  if (!uri) return '';
+  return uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+}
+
+function sanitizeErrorMessage(msg?: string): string {
+  if (!msg) return '';
+  return msg.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+}
 
 function checkPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -49,47 +58,75 @@ function findMongodBinary(): string | null {
 }
 
 export async function connectDB(): Promise<typeof mongoose> {
-  // If already fully connected, reuse connection immediately
+  // 1. If existing healthy connection is ready, reuse immediately
   if ((mongoose.connection.readyState as number) === 1 && cachedConnection) {
     return cachedConnection;
   }
 
+  // 2. If connection is in progress, reuse the existing in-flight promise to prevent concurrent duplicate connections
   if (connectionPromise) {
     return connectionPromise;
   }
 
+  const isVercel = Boolean(
+    process.env.VERCEL === '1' ||
+    process.env.VERCEL === 'true' ||
+    process.env.VERCEL_ENV ||
+    process.env.NOW_REGION
+  );
+  const isProduction = process.env.NODE_ENV === 'production';
+  const mongoUri = process.env.MONGO_URI?.trim();
+
+  // 3. Initiate new connection attempt
   connectionPromise = (async () => {
     mongoose.set('strictQuery', true);
 
+    // --- Production / Vercel Serverless Flow ---
+    if (isVercel || isProduction) {
+      if (!mongoUri) {
+        throw new Error('MongoDB Atlas connection failed: MONGO_URI environment variable is not defined.');
+      }
+
+      try {
+        const conn = await mongoose.connect(mongoUri, {
+          serverSelectionTimeoutMS: 8000,
+        });
+        console.log('[Database] Connected to MongoDB Atlas:', sanitizeUri(mongoUri));
+        console.log(`[Database] Database: ${conn.connection.db?.databaseName || 'animeflix'}`);
+        return conn;
+      } catch (err: any) {
+        console.error('[Database] MongoDB Atlas connection failed:', sanitizeErrorMessage(err?.message));
+        throw new Error('MongoDB Atlas connection failed');
+      }
+    }
+
+    // --- Local Development Flow ---
+    // If an external cloud MongoDB URI is provided during local dev, attempt to use it first
+    if (mongoUri && !mongoUri.includes('127.0.0.1') && !mongoUri.includes('localhost')) {
+      try {
+        const conn = await mongoose.connect(mongoUri, {
+          serverSelectionTimeoutMS: 8000,
+        });
+        console.log('[Database] Connected to external cloud MongoDB URI:', sanitizeUri(mongoUri));
+        console.log(`[Database] Database: ${conn.connection.db?.databaseName || 'animeflix'}`);
+        return conn;
+      } catch (err: any) {
+        console.warn(
+          '[Database] External cloud MongoDB connection attempt failed during local dev, falling back to local persistent daemon:',
+          sanitizeErrorMessage(err?.message)
+        );
+        await mongoose.disconnect().catch(() => {});
+      }
+    }
+
+    // Local persistent storage path for local development
     const dbDir = path.join(process.cwd(), '.mongo-data');
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
     const uriFile = path.join(dbDir, 'mongo-uri.txt');
 
-    const mongoUri = process.env.MONGO_URI;
-
-    // 1. If explicit external cloud MongoDB URI is configured (e.g. Vercel Atlas connection)
-    if (
-      !externalCloudFailed &&
-      mongoUri &&
-      !mongoUri.includes('127.0.0.1') &&
-      !mongoUri.includes('localhost')
-    ) {
-      try {
-        const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 2000 });
-        console.log('[Database] Connected to external cloud MongoDB URI:', mongoUri.replace(/\/\/.*@/, '//***@'));
-        console.log(`[Database] Database: ${conn.connection.db?.databaseName || 'animeflix'}`);
-        cachedConnection = conn;
-        return conn;
-      } catch (err) {
-        externalCloudFailed = true;
-        console.warn('[Database] External cloud MongoDB connection failed, falling back to local persistent daemon:', err);
-        await mongoose.disconnect().catch(() => {});
-      }
-    }
-
-    // 2. Check if local persistent mongod is already running on port 27017
+    // Check if local persistent mongod is already running on port 27017
     const is27017Open = await checkPortOpen(27017);
     const localUri = 'mongodb://127.0.0.1:27017/animeflix';
 
@@ -100,14 +137,13 @@ export async function connectDB(): Promise<typeof mongoose> {
         console.log(`[Database] Database name: ${conn.connection.db?.databaseName || 'animeflix'}`);
         fs.writeFileSync(uriFile, localUri, 'utf8');
         process.env.MONGO_URI = localUri;
-        cachedConnection = conn;
         return conn;
       } catch (err) {
         console.warn('[Database] Existing port 27017 connection attempt failed:', err);
       }
     }
 
-    // 3. Launch native mongod daemon on port 27017 with persistent .mongo-data storage
+    // Launch native mongod daemon on port 27017 with persistent .mongo-data storage
     const mongodBin = findMongodBinary();
     if (mongodBin && fs.existsSync(mongodBin)) {
       const lockFile = path.join(dbDir, 'mongod.lock');
@@ -151,14 +187,13 @@ export async function connectDB(): Promise<typeof mongoose> {
         console.log(`[Database] Database name: ${conn.connection.db?.databaseName || 'animeflix'}`);
         fs.writeFileSync(uriFile, localUri, 'utf8');
         process.env.MONGO_URI = localUri;
-        cachedConnection = conn;
         return conn;
       } catch (connErr) {
         console.error('[Database] Persistent mongod connection error:', connErr);
       }
     }
 
-    // 4. Memory server fallback with persistent .mongo-data storage
+    // Memory server fallback for local development
     try {
       const { MongoMemoryServer } = await import('mongodb-memory-server');
       const server = await MongoMemoryServer.create({
@@ -172,17 +207,20 @@ export async function connectDB(): Promise<typeof mongoose> {
       process.env.MONGO_URI = fallbackUri;
       const conn = await mongoose.connect(fallbackUri, { dbName: 'animeflix' });
       console.log('[Database] Connected to MongoMemoryServer at ' + fallbackUri);
-      cachedConnection = conn;
       return conn;
     } catch (finalErr) {
-      console.error('[Database] All MongoDB connection attempts failed:', finalErr);
+      console.error('[Database] All local MongoDB connection attempts failed:', finalErr);
       throw new Error('Database connection failed: Could not connect to any MongoDB instance.');
     }
   })();
 
   try {
     const conn = await connectionPromise;
+    cachedConnection = conn;
     return conn;
+  } catch (err) {
+    cachedConnection = null;
+    throw err;
   } finally {
     connectionPromise = null;
   }

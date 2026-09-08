@@ -41,12 +41,7 @@ export const animeService = {
         return list;
       } catch (retryErr: any) {
         console.error('[animeService.getAllAnime] Error retrieving anime from server:', retryErr);
-        try {
-          const { DEMO_ANIME } = await import('../utils/animeData');
-          return DEMO_ANIME;
-        } catch {
-          return [];
-        }
+        throw retryErr;
       }
     }
   },
@@ -85,11 +80,6 @@ export const animeService = {
         if (retryErr.response?.status === 404) {
           return null;
         }
-        try {
-          const { DEMO_ANIME } = await import('../utils/animeData');
-          const fallback = DEMO_ANIME.find((a) => a.id === id || a.slug === id);
-          if (fallback) return fallback;
-        } catch {}
         console.error('[animeService.getAnimeById] Error fetching anime from server:', retryErr);
         throw retryErr;
       }
