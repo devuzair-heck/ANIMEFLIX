@@ -77,12 +77,10 @@ export const animeController = {
         data: animeList,
       });
     } catch (err: any) {
-      console.warn('[getAllAnime Warning] MongoDB unavailable, serving catalog fallback:', err?.message || err);
-      res.status(200).json({
-        success: true,
-        count: INITIAL_ANIME_SEED.length,
-        data: INITIAL_ANIME_SEED,
-        fallback: true,
+      console.error('[getAllAnime Error]', err);
+      res.status(500).json({
+        success: false,
+        message: 'Database error: Failed to retrieve anime catalog from MongoDB.',
       });
     }
   },
@@ -131,18 +129,10 @@ export const animeController = {
 
       res.status(200).json({ success: true, data: anime, anime });
     } catch (err: any) {
-      console.warn('[getAnimeById Warning] Database error, checking fallback catalog:', err?.message || err);
-      const targetId = id ? id.trim() : '';
-      const fallbackItem = INITIAL_ANIME_SEED.find(
-        (a) => a.id === targetId || a.slug === targetId
-      );
-      if (fallbackItem) {
-        res.status(200).json({ success: true, data: fallbackItem, anime: fallbackItem, fallback: true });
-        return;
-      }
-      res.status(404).json({
+      console.error('[getAnimeById Error]', err);
+      res.status(500).json({
         success: false,
-        message: 'Anime not found in database.',
+        message: 'Database error: Failed to retrieve anime from MongoDB.',
       });
     }
   },

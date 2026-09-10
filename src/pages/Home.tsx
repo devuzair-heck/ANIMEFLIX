@@ -19,13 +19,8 @@ export const Home: React.FC = () => {
       const data = await animeService.getAllAnime();
       setAnimeList(data);
     } catch (err: any) {
-      console.warn('[Home Page] Database fetch notice, loading fallback catalog:', err?.message || err);
-      try {
-        const { DEMO_ANIME } = await import('../utils/animeData');
-        setAnimeList(DEMO_ANIME);
-      } catch {
-        setError('Unable to load anime catalog. Please check your connection and try again.');
-      }
+      console.error('[Home Page Error] Failed to retrieve anime catalog:', err);
+      setError('Unable to load anime catalog from database. Please try again.');
     } finally {
       setIsLoading(false);
     }
