@@ -196,12 +196,22 @@ export async function connectDB(): Promise<typeof mongoose> {
     // Memory server fallback for local development
     try {
       const { MongoMemoryServer } = await import('mongodb-memory-server');
-      const server = await MongoMemoryServer.create({
-        instance: {
-          dbName: 'animeflix',
-          dbPath: dbDir,
-        },
-      });
+      let server: any;
+      try {
+        server = await MongoMemoryServer.create({
+          instance: {
+            dbName: 'animeflix',
+            dbPath: dbDir,
+          },
+        });
+      } catch (pathErr) {
+        console.warn('[Database] Local persistent memory server path failed, falling back to clean in-memory server:', pathErr);
+        server = await MongoMemoryServer.create({
+          instance: {
+            dbName: 'animeflix',
+          },
+        });
+      }
       const fallbackUri = server.getUri() + 'animeflix';
       fs.writeFileSync(uriFile, fallbackUri, 'utf8');
       process.env.MONGO_URI = fallbackUri;

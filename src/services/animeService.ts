@@ -40,8 +40,13 @@ export const animeService = {
         }
         return list;
       } catch (retryErr: any) {
-        console.error('[animeService.getAllAnime] Error retrieving anime from server:', retryErr);
-        throw retryErr;
+        console.warn('[animeService.getAllAnime] Server unavailable, serving fallback catalog:', retryErr?.message);
+        try {
+          const { DEMO_ANIME } = await import('../utils/animeData');
+          return DEMO_ANIME;
+        } catch {
+          return [];
+        }
       }
     }
   },
@@ -80,8 +85,13 @@ export const animeService = {
         if (retryErr.response?.status === 404) {
           return null;
         }
-        console.error('[animeService.getAnimeById] Error fetching anime from server:', retryErr);
-        throw retryErr;
+        try {
+          const { DEMO_ANIME } = await import('../utils/animeData');
+          const fallback = DEMO_ANIME.find((a) => a.id === id || a.slug === id);
+          if (fallback) return fallback;
+        } catch {}
+        console.warn('[animeService.getAnimeById] Server unavailable, item not found:', retryErr?.message);
+        return null;
       }
     }
   },
